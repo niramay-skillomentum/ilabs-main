@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SGB OpsMail</title>
+</head>
+
+<body style="margin:0; font-family:Segoe UI, Arial; background:#f5f7fa;">
+
+<!-- TOP BAR -->
+<div style="
+  height:48px;
+  background:#1f2937;
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+  font-size:14px;
+">
+  <div style="font-weight:600;">SGB OpsMail</div>
+
+  <div style="display:flex; gap:20px;">
+    <div id="userInfo"></div>
+    <div id="todayDate"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div style="display:flex; height:calc(100vh - 48px);">
+
+  <!-- INBOX -->
+  <div style="width:34%; border-right:1px solid #ddd; background:white; display:flex; flex-direction:column;">
+
+    <div style="padding:10px; border-bottom:1px solid #eee;">
+      <input id="searchBox" placeholder="Search"
+        style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <div id="inboxList" style="flex:1; overflow-y:auto;"></div>
+
+  </div>
+
+  <!-- THREAD -->
+  <div style="width:66%; display:flex; flex-direction:column;">
+
+    <!-- SUBJECT -->
+    <div style="padding:14px 16px; border-bottom:1px solid #ddd; background:white;">
+      <div id="subjectLine" style="font-size:16px; font-weight:600;"></div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div id="messages" style="flex:1; overflow-y:auto; padding:16px; background:#f9fafb;"></div>
+
+    <!-- INPUT -->
+    <div style="padding:12px; border-top:1px solid #ddd; background:white;">
+      <textarea id="messageBox" placeholder="Reply..."
+        style="width:100%; height:70px; border:1px solid #ccc; border-radius:4px; padding:8px;"></textarea>
+
+      <div style="margin-top:8px;">
+        <button onclick="sendMessage()">Send Email</button>
+        <button onclick="resolveConversation()">Resolve</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+
+let selectedTradeRef = localStorage.getItem("activeTradeRef");
+let userId = localStorage.getItem("userId");
+let desk = localStorage.getItem("desk");
+
+if(!userId){
+  alert("Session expired. Login again.");
+  window.location.href = "/";
+}
+
+document.getElementById("userInfo").innerText =
+  (desk || "") + " Desk | Welcome, " + userId;
+
+let inboxData = [];
+
+/* DATE */
+(function(){
+  const d = new Date();
+  document.getElementById("todayDate").innerText =
+    d.toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"});
+})();
+
+/* FORMATTERS */
+function formatDate(ts){
+  const d = new Date(ts);
+  return d.toLocaleString("en-GB", {
+    day:"2-digit", month:"short",
+    hour:"2-digit", minute:"2-digit"
+  });
+}
+
+function formatAmount(amount){
+  return Number(amount).toLocaleString();
+}
+
+function buildSubject(trade){
+  if(!trade) return "";
+  const vd = new Date(trade.valueDate)
+    .toLocaleDateString("en-GB",{day:"2-digit",month:"short"});
+  return `${trade.tradeRef} | ${trade.currency} ${formatAmount(trade.amount)} | ${vd}`;
+}
+
+/* LOAD INBOX */
+function loadInbox(){
+
+  fetch(`/api/queue/my?userId=${userId}`)
+    .then(res=>res.json())
+    .then(data=>{
+
+      const trades = data.trades || [];
+
+      const promises = trades.map(trade =>
+        fetch(`/api/conversation/${trade.tradeRef}`)
+          .then(r=>r.json())
+          .then(conv => {
+
+            const lastMsg = conv.messages.length
+              ? conv.messages[conv.messages.length - 1]
+              : null;
+
+            if(!lastMsg) return null;
+
+            return {
+              trade,
+              subject: buildSubject(trade),
+              lastMsg
+            };
+          })
+      );
+
+      Promise.all(promises).then(results => {
+
+        inboxData = results
+          .filter(x => x !== null)
+          .sort((a,b)=> b.lastMsg.timestamp - a.lastMsg.timestamp);
+
+        renderInbox(inboxData);
+      });
+
+    });
+}
+
+/* RENDER INBOX */
+function renderInbox(list){
+
+  const container = document.getElementById("inboxList");
+  container.innerHTML = "";
+
+  list.forEach(item=>{
+
+    const div = document.createElement("div");
+
+    div.style.padding = "12px 14px";
+    div.style.borderBottom = "1px solid #f0f0f0";
+    div.style.cursor = "pointer";
+    div.style.background = item.trade.tradeRef === selectedTradeRef ? "#e7f0ff" : "#fff";
+
+    div.onmouseover = () => div.style.background = "#f3f4f6";
+    div.onmouseout = () => {
+      if(item.trade.tradeRef !== selectedTradeRef){
+        div.style.background = "#fff";
+      }
+    };
+
+    let sender = "Counterparty";
+    if(item.lastMsg.sender === "USER") sender = "You";
+    if(item.lastMsg.sender === "FO") sender = "Front Office";
+
+    const preview = item.lastMsg.body;
+    const time = formatDate(item.lastMsg.timestamp);
+
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between;">
+        <div style="font-weight:600; font-size:13px; color:#111;">
+          ${sender}
+        </div>
+        <div style="font-size:11px; color:#888;">
+          ${time}
+        </div>
+      </div>
+
+      <div style="font-size:13px; color:#222; margin-top:2px;">
+        ${item.subject}
+      </div>
+
+      <div style="font-size:12px; color:#777; margin-top:2px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        ${preview}
+      </div>
+    `;
+
+    div.onclick = () => {
+      loadConversation(item.trade.tradeRef);
+    };
+
+    container.appendChild(div);
+  });
+}
+
+/* LOAD CONVERSATION */
+function loadConversation(tradeRef) {
+
+  selectedTradeRef = tradeRef;
+  localStorage.setItem("activeTradeRef", tradeRef);
+
+  fetch(`/api/queue/my?userId=${userId}`)
+    .then(res=>res.json())
+    .then(data=>{
+      const trade = data.trades.find(t=>t.tradeRef===tradeRef);
+      document.getElementById("subjectLine").innerText = buildSubject(trade);
+    });
+
+  fetch(`/api/conversation/${tradeRef}`)
+    .then(res => res.json())
+    .then(data => {
+
+      const container = document.getElementById("messages");
+      container.innerHTML = "";
+
+      data.messages.forEach(msg => {
+
+        const div = document.createElement("div");
+
+        div.style.padding = "14px 0";
+        div.style.marginBottom = "6px";
+        div.style.borderBottom = "1px solid #eee";
+
+        let senderLabel = "You";
+        if(msg.sender === "FO") senderLabel = "Front Office";
+        if(msg.sender === "COUNTERPARTY") senderLabel = "Counterparty";
+
+        if(msg.sender === "USER"){
+          div.style.background = "#f5faff";
+          div.style.padding = "10px";
+          div.style.borderRadius = "4px";
+        }
+
+        div.innerHTML = `
+          <div style="display:flex; justify-content:space-between;">
+            <div style="font-weight:600;">${senderLabel}</div>
+            <div style="font-size:11px; color:#888;">
+              ${formatDate(msg.timestamp)}
+            </div>
+          </div>
+
+          <div style="margin-top:6px; line-height:1.5;">
+            ${msg.body}
+          </div>
+        `;
+
+        container.appendChild(div);
+      });
+
+      container.scrollTop = container.scrollHeight;
+
+      loadInbox();
+
+    });
+}
+
+/* SEND MESSAGE */
+function sendMessage() {
+
+  const message = document.getElementById("messageBox").value.trim();
+
+  if (!message) {
+    alert("Mail cannot be empty");
+    return;
+  }
+
+  if (!selectedTradeRef) {
+    alert("No trade selected");
+    return;
+  }
+
+  fetch("/api/conversation/send", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      tradeRef: selectedTradeRef,
+      sender: "USER",
+      message
+    })
+  })
+  .then(() => {
+    document.getElementById("messageBox").value = "";
+    loadConversation(selectedTradeRef);
+  });
+}
+
+/* RESOLVE */
+function resolveConversation() {
+
+  fetch("/api/conversation/resolve", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      tradeRef: selectedTradeRef,
+      userId
+    })
+  })
+  .then(() => alert("Resolved"));
+}
+
+/* SEARCH */
+document.getElementById("searchBox").addEventListener("input", function(){
+  const val = this.value.toLowerCase();
+  const filtered = inboxData.filter(i =>
+    i.trade.tradeRef.toLowerCase().includes(val)
+  );
+  renderInbox(filtered);
+});
+
+/* INIT */
+loadInbox();
+
+if (selectedTradeRef) {
+  loadConversation(selectedTradeRef);
+}
+
+/* AUTO REFRESH */
+setInterval(() => {
+  if (selectedTradeRef) {
+    loadConversation(selectedTradeRef);
+  }
+  loadInbox();
+}, 3000);
+
+</script>
+
+</body>
+</html>

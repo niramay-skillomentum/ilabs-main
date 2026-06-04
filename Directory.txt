@@ -1,0 +1,56 @@
+Directory 
+
+ILABS/
+│
+├── node_modules/
+│
+├── prisma/
+│   ├── migrations/
+│   │   ├── 20260301091122_add_user_model/
+│   │   ├── 20260303094325_init_trade_model/
+│   │   └── migration_lock.toml
+│   └── schema.prisma
+│
+├── Public/
+│   ├── assets/
+│   │   └── logo.png
+│   ├── dashboard.html
+│   ├── index.html
+│   ├── mo-risk.html
+│   ├── mailbox.html
+│   └── workstation.html
+│
+├── src/
+│   ├── engine/
+│   │   ├── aiParser.js
+│   │   ├── amendmentEngine.js
+│   │   ├── auditEngine.js
+│   │   ├── botconfig.js
+│   │   ├── boxPool.js
+│   │   ├── clock.js
+│   │   ├── communicationEngine.js
+│   │   ├── conversationEngine.js
+│   │   ├── cptyAI.js
+│   │   ├── cutoff.js
+│   │   ├── dailyScheduler.js
+│   │   ├── errors.js
+│   │   ├── lifecycle.js
+│   │   ├── lifecycleBot.js
+│   │   ├── queue.js
+│   │   ├── queueComposer.js
+│   │   ├── reconBreakEngine.js
+│   │   ├── reconciliation.js
+│   │   ├── scenarioEngine.js
+│   │   ├── settlement.js
+│   │   ├── settlementBreakEngine.js
+│   │   ├── settlementInteraction.js
+│   │
+│   └── routes/
+│       └── uiRoutes.js
+│
+├── .env
+├── .gitignore
+├── package-lock.json
+├── package.json
+├── prisma.config.ts
+└── server.js

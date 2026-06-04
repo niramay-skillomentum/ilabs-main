@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Desk Selection</title>
+<style>
+body {
+    font-family: Arial;
+    background: #F5F7FA;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.container {
+    text-align:center;
+}
+button {
+    padding:15px 25px;
+    margin:10px;
+    font-size:16px;
+    cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Select Desk</h2>
+
+    <button onclick="goDesk('MO')">MO Desk</button>
+    <button onclick="goDesk('CONFIRMATION')">Confirmation Desk</button>
+    <button onclick="goDesk('SETTLEMENT')">Settlement Desk</button>
+</div>
+
+<script>
+function goDesk(desk){
+    localStorage.setItem("desk", desk);
+    window.location.href = "/workstation.html";
+}
+</script>
+
+</body>
+</html>

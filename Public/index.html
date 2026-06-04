@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Skillomentum Global Bank Operations Simulator</title>
+
+<style>
+body{
+    font-family: Arial;
+    background:#F5F7FA;
+    margin:0;
+}
+.topbar{
+    background:#0B1F3A;
+    color:white;
+    padding:24px 35px;
+}
+.topbar-inner{
+    display:flex;
+    align-items:center;
+    gap:22px;
+}
+.logo{ height:65px; }
+.title{ font-size:26px; font-weight:600; }
+
+.login-box{
+    width:340px;
+    margin:120px auto;
+    background:white;
+    padding:30px;
+    border-radius:6px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+.login-box input{
+    width:100%;
+    padding:10px;
+    margin-top:12px;
+}
+
+.login-box button{
+    width:100%;
+    padding:12px;
+    margin-top:16px;
+    background:#FFC107;
+    border:none;
+    font-weight:bold;
+    cursor:pointer;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="topbar">
+<div class="topbar-inner">
+<div class="title">Skillomentum Global Bank Operations Simulator</div>
+</div>
+</div>
+
+<div class="login-box">
+<h2>Login</h2>
+
+<form id="loginForm">
+<input type="text" id="userIdInput" placeholder="User ID" required>
+<input type="password" placeholder="Password">
+<button type="submit">Login</button>
+</form>
+
+</div>
+
+<script>
+console.log("Login script loaded");
+
+const form = document.getElementById("loginForm");
+
+if(form){
+    form.addEventListener("submit", function(e){
+        e.preventDefault();
+
+        console.log("Form submitted");
+
+        const userId = document.getElementById("userIdInput").value.trim();
+
+        if(!userId){
+            alert("Enter User ID");
+            return;
+        }
+
+        localStorage.setItem("userId", userId);
+
+        console.log("Redirecting...");
+
+        window.location.href = "/dashboard.html";
+    });
+}else{
+    console.error("Form not found");
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MO Risk Management System</title>
+</head>
+
+<body style="margin:0; font-family:Segoe UI, Arial; background:#f5f7fa;">
+
+<!-- TOP BAR -->
+<div style="
+  height:48px;
+  background:#0B1F3A;
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+  font-size:14px;
+">
+  <div style="font-weight:600;">
+    MO Risk Management System
+  </div>
+  <div id="userInfo"></div>
+</div>
+
+<!-- MAIN -->
+<div style="display:flex; height:calc(100vh - 48px);">
+
+  <!-- LEFT -->
+  <div style="width:40%; border-right:1px solid #ddd; background:white; display:flex; flex-direction:column;">
+
+    <div style="padding:10px; border-bottom:1px solid #eee;">
+      <input id="searchBox" placeholder="Search trades..."
+        style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+    </div>
+
+    <div id="resultsList" style="flex:1; overflow-y:auto;"></div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div style="width:60%; padding:16px; display:flex; flex-direction:column;">
+
+    <div id="docViewer" style="
+      background:white;
+      border:1px solid #ddd;
+      padding:16px;
+      flex:1;
+      overflow-y:auto;
+    ">
+      Select a document to view
+    </div>
+
+    <!-- FIXED BUTTON POSITION -->
+    <button onclick="simulateAmendment()" style="margin-top:10px;">
+      Simulate FO Amendment
+    </button>
+
+  </div>
+
+</div>
+
+<script>
+
+let userId = localStorage.getItem("userId");
+let desk = localStorage.getItem("desk");
+
+if(!userId){
+  alert("Session expired. Login again.");
+  window.location.href = "/";
+}
+
+document.getElementById("userInfo").innerText =
+  (desk || "") + " Desk | Welcome, " + userId;
+
+let allTrades = [];
+
+/* =========================
+   LOAD TRADES
+========================= */
+function loadTrades(){
+  fetch(`/api/queue/my?userId=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+      allTrades = data.trades || [];
+      renderResults(allTrades);
+    });
+}
+
+/* =========================
+   RENDER LIST
+========================= */
+function renderResults(list){
+
+  const container = document.getElementById("resultsList");
+  container.innerHTML = "";
+
+  list.forEach(trade => {
+
+    const div = document.createElement("div");
+
+    div.style.padding = "12px";
+    div.style.borderBottom = "1px solid #eee";
+    div.style.cursor = "pointer";
+
+    div.innerHTML = `
+      <div style="font-weight:600;">
+        Termsheet - ${trade.counterparty || "Unknown"}
+      </div>
+      <div style="font-size:12px; color:#555;">
+        ${trade.tradeRef}
+      </div>
+      <div style="font-size:12px; color:#777;">
+        ${trade.currency} ${Number(trade.amount).toLocaleString()}
+      </div>
+    `;
+
+    div.onclick = () => openDocument(trade);
+
+    container.appendChild(div);
+
+  });
+}
+
+/* =========================
+   OPEN DOCUMENT (FIXED)
+========================= */
+function openDocument(trade){
+
+  const viewer = document.getElementById("docViewer");
+
+  let foTruth = getFOTruth();
+
+  // 🔥 GENERATE ONLY ONCE
+  if(!foTruth[trade.tradeRef]){
+
+    let baseAmount = trade.amount;
+    let baseValueDate = trade.valueDate;
+
+    if(Math.random() < 0.5){
+      baseAmount = trade.amount + 50000;
+    }
+
+    if(Math.random() < 0.5){
+      const d = new Date(trade.valueDate);
+      d.setDate(d.getDate() + 1);
+      baseValueDate = d.toISOString();
+    }
+
+    foTruth[trade.tradeRef] = {
+      amount: baseAmount,
+      valueDate: baseValueDate
+    };
+
+    setFOTruth(foTruth);
+  }
+
+  let amendments = getAmendments()[trade.tradeRef] || {};
+  let fo = getFOTruth()[trade.tradeRef];
+
+  let refAmount = amendments.amount || fo.amount;
+  let refValueDate = amendments.valueDate || fo.valueDate;
+
+  const vd = new Date(refValueDate)
+    .toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"});
+
+  viewer.innerHTML = `
+    <h3>Termsheet (FO Reference)</h3>
+    <hr>
+
+    <p><b>Trade Reference:</b> ${trade.tradeRef}</p>
+    <p><b>Counterparty:</b> ${trade.counterparty || "N/A"}</p>
+
+    <p><b>Currency:</b> ${trade.currency}</p>
+    <p><b>Amount:</b> ${Number(refAmount).toLocaleString()}</p>
+
+    <p><b>Value Date:</b> ${vd}</p>
+  `;
+}
+
+/* =========================
+   SEARCH
+========================= */
+document.getElementById("searchBox").addEventListener("input", function(){
+
+  const val = this.value.toLowerCase();
+
+  const filtered = allTrades.filter(t =>
+    (t.tradeRef || "").toLowerCase().includes(val) ||
+    (t.currency || "").toLowerCase().includes(val) ||
+    String(t.amount || "").includes(val)
+  );
+
+  renderResults(filtered);
+});
+
+/* =========================
+   AMENDMENTS
+========================= */
+function getAmendments(){
+  return JSON.parse(localStorage.getItem("amendments") || "{}");
+}
+
+/* =========================
+   FO TRUTH STORAGE
+========================= */
+function getFOTruth(){
+  return JSON.parse(localStorage.getItem("foTruth") || "{}");
+}
+
+function setFOTruth(data){
+  localStorage.setItem("foTruth", JSON.stringify(data));
+}
+
+/* =========================
+   TEST BUTTON
+========================= */
+function simulateAmendment(){
+
+  if(!allTrades.length) return;
+
+  const trade = allTrades[0];
+
+  let amendments = getAmendments();
+
+  amendments[trade.tradeRef] = {
+    amount: trade.amount + 50000,
+    valueDate: new Date(trade.valueDate).toISOString()
+  };
+
+  localStorage.setItem("amendments", JSON.stringify(amendments));
+
+  alert("FO Amendment Applied. Re-open document.");
+}
+
+/* =========================
+   INIT
+========================= */
+loadTrades();
+
+</script>
+
+</body>
+</html>
