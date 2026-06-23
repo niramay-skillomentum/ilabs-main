@@ -1,230 +1,99 @@
+// ======================================
+// CPTY AI PERSONA (HYBRID: GEMINI + OFFLINE FALLBACK)
+// Tries Gemini LLM first for natural responses.
+// Falls back to the offline engine if Gemini is
+// unavailable, rate-limited, or too slow.
+// ======================================
+
+const llmService = require("./llmService");
+const offlineResponseEngine = require("./offlineResponseEngine");
 const truthEngine = require("./truthEngine");
 
 // ======================================
-// CONVERSATION STATE (IN-MEMORY)
+// GEMINI SYSTEM PROMPT FOR CPTY
 // ======================================
-const conversationState = {};
+function buildCPTYSystemPrompt(trade, parsedIntent) {
+  const scenario = truthEngine.getScenario(trade.tradeRef) || {};
+  const refCheck = truthEngine.verifyReference(trade.tradeRef);
+  const payment = truthEngine.checkPaymentReceived(trade.tradeRef);
+  const ssi = truthEngine.verifySSI(trade.tradeRef);
+  
+  const confirmMismatches = truthEngine.getConfirmationMismatches(trade);
 
-function getState(tradeRef) {
-  if (!conversationState[tradeRef]) {
-    conversationState[tradeRef] = {
-      attempts: 0,
-      isClosed: false
-    };
+  let context = `You are a Counterparty Operations professional replying to a bank's Middle Office.
+You are responding about Trade ${trade.tradeRef}.
+`;
+
+  if (confirmMismatches && confirmMismatches.length > 0) {
+    context += `\nKNOWN DISCREPANCIES (YOU MUST REFER TO THESE EXACT EXPECTED VALUES):`;
+    confirmMismatches.forEach(m => {
+      context += `\n- Field [${m.field}]: Bank booking shows ${m.tradeValue}, but WE EXPECT ${m.cptyExpected}.`;
+    });
+  } else if (scenario.breakType) {
+    context += `\nKNOWN BREAK TYPE: ${scenario.breakType}`;
+  } else {
+    context += `\nNO KNOWN BREAKS on this trade. Everything matches our records.`;
   }
-  return conversationState[tradeRef];
+
+  if (payment) {
+    context += `\nPayment Received: ${payment.paymentReceived ? "Yes" : "No"}`;
+  }
+  if (ssi) {
+    context += `\nSSI Correct: ${ssi.correct ? "Yes" : "No"}`;
+    if (!ssi.correct) context += ` (Correct SSI: ${ssi.correctSSI})`;
+  }
+  if (refCheck) {
+    context += `\nReference Correct: ${refCheck.correct ? "Yes" : "No"}`;
+  }
+
+  if (parsedIntent && parsedIntent.intent) {
+    context += `\nParsed User Intent: ${parsedIntent.intent}`;
+  }
+
+  context += `
+
+RULES:
+- Reply professionally, like a real counterparty operations desk would in an Outlook email.
+- Provide factual answers based on the data above.
+- If there are known discrepancies, explicitly state what your records expect (the WE EXPECT values).
+- If the user's query is vague or just a greeting, ask for clarification.
+- Keep responses concise (2-5 sentences).
+- Do NOT invent issues or numbers that don't exist in the data above.
+- Sign off with a realistic name and title.
+
+Respond in this JSON format:
+{
+  "action": "IMMEDIATE_ANSWER",
+  "subject": "RE: Trade Inquiry",
+  "body": "<your email body>"
+}`;
+
+  return context;
 }
 
-function generateResponse(parsedIntent, tradeRef) {
+// ======================================
+// MAIN RESPONSE GENERATOR (HYBRID)
+// ======================================
+async function generateResponse(parsedIntent, tradeRef, userMessage) {
 
-  // 🎯 Tone variation (kept minimal for realism)
-  const openings = ["Dear Team,", "Hello,", "Hi,"];
-  const closings = [
-    "Regards, Counterparty Operations",
-    "Best regards",
-    "Thanks",
-    "Kind regards"
-  ];
+  // ── ATTEMPT 1: Gemini LLM ──
+  try {
+    const Trade = require("../models/Trade");
+    const trade = await Trade.findOne({ tradeRef });
+    const systemPrompt = buildCPTYSystemPrompt(trade, parsedIntent);
+    const geminiResult = await llmService.generateResponse(systemPrompt, userMessage);
 
-  function pick(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+    if (geminiResult && geminiResult.body) {
+      console.log("✅ CPTY Response: Gemini LLM succeeded for", tradeRef);
+      return geminiResult;
+    }
+  } catch (err) {
+    console.warn("⚠️ CPTY Gemini failed, falling back to offline engine:", err.message);
   }
 
-  let body = "";
-
-  // ======================================
-  // GLOBAL STATE CHECK
-  // ======================================
-  const state = getState(tradeRef);
-
-  // 🔴 Global ghost check
-  if (state.isClosed) {
-    return null;
-  }
-
-  // ======================================
-  // FORCE REFERENCE VALIDATION (NEW)
-  // ======================================
-  if (parsedIntent.reference) {
-
-    const referenceCheck = truthEngine.verifyReference(
-      tradeRef,
-      parsedIntent.reference
-    );
-
-    if (!referenceCheck || !referenceCheck.correct) {
-
-      state.attempts += 1;
-
-      if (state.attempts === 1) {
-        body = `
-We are unable to validate the reference provided.
-
-Kindly recheck and resend the correct details.
-`;
-      }
-      else if (state.attempts === 2) {
-        body = `
-We are still unable to validate the reference.
-
-Please ensure the correct trade reference is shared.
-`;
-      }
-      else if (state.attempts === 3) {
-        body = `
-We are unable to proceed without a valid trade reference.
-
-Kindly verify and revert.
-`;
-      }
-      else {
-        state.isClosed = true;
-        return null;
-      }
-
-      return {
-        subject: "RE: Trade Inquiry",
-        body: `${pick(openings)}
-
-${body.trim()}
-
-${pick(closings)}`
-      };
-    }
-
-    // ✅ VALID REFERENCE → RESET STATE
-    state.attempts = 0;
-    state.isClosed = false;
-  }
-
-  // ======================================
-  // BUSINESS LOGIC (DETERMINISTIC CORE)
-  // ======================================
-
-  switch (parsedIntent.intent) {
-
-    // ==============================
-    // PAYMENT STATUS
-    // ==============================
-    case "PAYMENT_STATUS_QUERY": {
-
-      const payment = truthEngine.checkPaymentReceived(tradeRef);
-
-      if (!payment) {
-
-        body = `
-We are unable to confirm payment status at the moment.
-
-Please recheck and revert.
-`;
-
-      } else if (payment.paymentReceived) {
-
-        body = `
-Funds have been received successfully for the trade.
-
-No pending issues from our side.
-`;
-
-      } else {
-
-        body = `
-Funds have not yet been received for this trade.
-
-Please confirm status from your side.
-`;
-
-      }
-
-      break;
-    }
-
-    // ==============================
-    // SSI
-    // ==============================
-    case "SSI_QUERY": {
-
-      const ssiCheck = truthEngine.verifySSI(tradeRef);
-
-      if (!ssiCheck) {
-
-        body = `
-Unable to validate SSI details at the moment.
-
-Please recheck and revert.
-`;
-
-      } else if (ssiCheck.correct) {
-
-        body = `
-SSI details appear correct as per our records.
-
-Please reconfirm from your end.
-`;
-
-      } else {
-
-        body = `
-The SSI used does not match our records.
-
-Please update SSI before reprocessing.
-`;
-
-      }
-
-      break;
-    }
-
-    // ==============================
-    // DEFAULT (MOST IMPORTANT)
-    // ==============================
-    default: {
-
-      const scenario = truthEngine.getScenario(tradeRef);
-
-      // 🔒 Defensive fallback
-      if (!scenario) {
-
-        body = `
-We are reviewing your query and will revert shortly.
-`;
-
-        break;
-      }
-
-      // 🔥 FO TRUTH (DETERMINISTIC)
-      const correctAmount = scenario.amount || "N/A";
-      const correctVD = scenario.valueDate
-        ? new Date(scenario.valueDate).toISOString().split("T")[0]
-        : "N/A";
-
-      body = `
-Please note the correct trade details as per our records:
-
-Amount: ${correctAmount}
-Value Date: ${correctVD}
-
-Kindly update your system accordingly.
-`;
-
-      break;
-    }
-  }
-
-  // ======================================
-  // REALISM LAYER (CONTROLLED VARIATION)
-  // ======================================
-
-  const finalBody = `${pick(openings)}
-
-${body.trim()}
-
-${pick(closings)}`;
-
-  return {
-    subject: "RE: Trade Inquiry",
-    body: finalBody
-  };
+  // ── ATTEMPT 2: Offline Engine (guaranteed) ──
+  console.log("🔄 CPTY Response: Using offline engine for", tradeRef);
+  return offlineResponseEngine.generateCPTYResponseOffline(parsedIntent, tradeRef, userMessage);
 }
 
 module.exports = {

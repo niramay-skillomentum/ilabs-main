@@ -3,113 +3,220 @@
 <head>
 <title>Operations Workstation</title>
 
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-body{
-    font-family: Arial;
-    background:#F5F7FA;
-    margin:0;
+body {
+    font-family: 'Inter', sans-serif;
+    background: #f0f4f8;
+    margin: 0;
+    color: #1e293b;
 }
 
-.topbar{
-    padding:15px 25px;
-    color:white;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
+.topbar {
+    padding: 16px 30px;
+    background: linear-gradient(135deg, #0B1F3A 0%, #1E3A5F 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.clock{ font-size:13px; }
+.clock { font-size: 14px; font-weight: 500; margin: 0 15px; }
 
-.container{
-    width:98%;
-    margin:15px auto;
+.session-timer {
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.15);
+    margin: 0 10px;
+}
+
+.container {
+    width: 96%;
+    max-width: 1600px;
+    margin: 24px auto;
 }
 
 /* TABLE */
-.table-container{
-    height:520px;
-    overflow:auto;
-    background:white;
-    border-radius:6px;
+.table-container {
+    height: 550px;
+    overflow: auto;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border: 1px solid #cbd5e1;
 }
 
-table{
-    border-collapse:collapse;
-    width:100%;
-    min-width:1500px;
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 1500px;
+    font-size: 12px;
 }
 
-th{
-    position:sticky;
-    top:0;
-    background:#0B1F3A;
-    color:white;
-    padding:8px;
-    font-size:12px;
+th {
+    position: sticky;
+    top: 0;
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 6px 10px;
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 2px solid #0f172a;
+    border-right: 1px solid #334155;
+    z-index: 10;
+    white-space: nowrap;
 }
 
-td{
-    padding:8px;
-    border-bottom:1px solid #eee;
-    font-size:12px;
+td {
+    padding: 4px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    color: #334155;
+    white-space: nowrap;
 }
 
-/* STATES */
-.break-row{ background:#fff3cd; }
-.pending-row{ background:#e6f0ff; }
-.aged-row{ background:#ffe6e6; }
+tbody tr:nth-child(even) td {
+    background-color: #f8fafc;
+}
+
+tbody tr:hover td {
+    background-color: #e0e7ff;
+    cursor: pointer;
+}
+
+.num {
+    text-align: right;
+    font-family: 'Consolas', 'Courier New', monospace;
+}
 
 /* ACTION BAR */
-.action-bar{
-    background:white;
-    padding:10px;
-    margin-top:10px;
-    display:flex;
-    justify-content:space-between;
-    border-radius:6px;
-    flex-wrap:wrap;
+.action-bar {
+    background: white;
+    padding: 16px;
+    margin-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    flex-wrap: wrap;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
 }
 
-.btn{
-    padding:8px 12px;
-    margin:4px;
-    border:none;
-    cursor:pointer;
-    font-size:12px;
+.btn {
+    padding: 10px 18px;
+    margin: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-.primary{ background:#0B1F3A; color:white; }
-.secondary{ background:#0B1F3A; color:white; }
-.warning{ background:#FFC107; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.btn:active { transform: translateY(0); }
 
-/* POPUP */
-.popup{
-    position:fixed;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    background:white;
-    padding:20px;
-    border-radius:6px;
-    width:400px;
-    display:none;
-    z-index:999;
+.primary { background: #0B1F3A; color: white; }
+.primary:hover { background: #1E3A5F; }
+.secondary { background: #e2e8f0; color: #1e293b; }
+.secondary:hover { background: #cbd5e1; }
+.warning { background: #f59e0b; color: white; }
+.warning:hover { background: #d97706; }
+
+/* POPUP / GLASSMORPHISM */
+.popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    padding: 24px;
+    border-radius: 16px;
+    width: 450px;
+    display: none;
+    z-index: 999;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.popup textarea{
-    width:100%;
-    height:80px;
+.popup h3 { margin-top: 0; color: #0f172a; font-size: 18px; }
+
+.popup textarea, .popup input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-top: 10px;
+    resize: vertical;
+}
+.popup textarea:focus, .popup input:focus { outline: none; border-color: #3b82f6; ring: 2px solid #93c5fd; }
+.popup textarea { height: 100px; }
+
+.overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    z-index: 998;
 }
 
-.overlay{
-    position:fixed;
-    top:0;
-    left:0;
-    width:100%;
-    height:100%;
-    background:rgba(0,0,0,0.4);
-    display:none;
-    z-index:998;
+/* AUDIT CARDS */
+#auditContent {
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 15px 0;
+    padding-right: 10px;
+}
+.audit-card {
+    background: #f8fafc;
+    border-left: 4px solid #3b82f6;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px 8px 8px 4px;
+    font-size: 13px;
+}
+.audit-card.system {
+    border-left-color: #8b5cf6;
+    background: #f5f3ff;
+}
+.audit-header {
+    display: flex;
+    justify-content: space-between;
+    color: #64748b;
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+.audit-action { font-weight: 600; color: #0f172a; margin-bottom: 2px; }
+.audit-details { color: #475569; }
+
+/* XML Audit */
+.xml-section {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 10px;
+}
+.xml-toggle {
+    cursor: pointer;
+    color: #3b82f6;
+    font-size: 12px;
+    margin-top: 8px;
+    display: inline-block;
 }
 </style>
 </head>
@@ -117,8 +224,11 @@ td{
 <body>
 
 <div class="topbar" id="topbar">
-    <div id="deskTitle">Workstation</div>
+    <div class="desk-title" id="deskTitle">MO Desk | Welcome, User</div>
     <div>
+        <button class="btn" onclick="openTermsheet()" id="termsheetBtn" style="display:none; background:#f59e0b; color:white; margin-right: 10px;">📄 View Termsheet</button>
+        <button class="btn primary" onclick="openMailboxGeneral(desk === 'MO' ? 'FO' : null)">📧 Mailbox</button>
+        <span class="session-timer" id="sessionTimer"></span>
         <button class="btn warning" onclick="refreshQueue()">Refresh</button>
         <span class="clock" id="clock"></span>
         <button class="btn secondary" onclick="logout()">Logoff</button>
@@ -137,7 +247,7 @@ td{
 <th>Trade Ref</th>
 <th>Status</th>
 <th>Next Desk</th>
-<th>Age</th>
+<th class="num">Age</th>
 <th>Trade Date</th>
 <th>Value Date</th>
 <th>Counterparty</th>
@@ -148,7 +258,7 @@ td{
 <th>Settlement Type</th>
 <th>Direction</th>
 <th>Currency</th>
-<th>Amount</th>
+<th class="num">Amount</th>
 </tr>
 </thead>
 <tbody id="tableBody"></tbody>
@@ -161,11 +271,10 @@ td{
 
 <div>
 <button class="btn secondary" onclick="downloadCSV()">Download Excel</button>
-<button class="btn secondary" onclick="openEmail()">Send Email</button>
 <button class="btn secondary" onclick="openAudit()">Audit</button>
-<button class="btn secondary" onclick="openSearch()">Search</button>
-<button class="btn secondary" onclick="openMailbox()">Mail</button>
-<button class="btn secondary" onclick="simulateFO()">SIMULATE</button>
+<button class="btn secondary" onclick="openMailboxGeneral()">📧 Mailbox</button>
+<button id="viewTruthBtn" class="btn secondary" style="background-color:#8b5cf6; color:white; border:none; display:inline-block;" onclick="viewTruth()">👁️ View Truth</button>
+<button id="termsheetBtn" class="btn secondary" style="background-color:#10b981; color:white; border:none; display:none;" onclick="openTermsheet()">📄 Termsheet</button>
 </div>
 
 </div>
@@ -191,8 +300,8 @@ td{
 <button onclick="closePopup()">Cancel</button>
 </div>
 
-<div class="popup" id="auditPopup">
-<h3>Audit</h3>
+<div class="popup" id="auditPopup" style="width: 550px;">
+<h3>Audit Trail</h3>
 <div id="auditContent"></div>
 <button onclick="closePopup()">Close</button>
 </div>
@@ -207,15 +316,43 @@ td{
 
 <script>
 
+// ======================================
+// COOKIE HELPERS (no sessionStorage)
+// ======================================
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+function clearCookie(name) {
+    document.cookie = name + "=; Path=/; Max-Age=0; SameSite=Lax";
+}
+
+function getToken() { return sessionStorage.getItem("auth_token") || getCookie("auth_token"); }
+
+function authHeaders() {
+    return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + getToken()
+    };
+}
+
+// ======================================
+// SESSION STATE (from URL params only)
+// ======================================
 let selectedTrade = null;
 let queue = [];
-const userId = localStorage.getItem("userId");
-const desk = localStorage.getItem("desk");
+let sessionExpiry = null;
+
+const wsParams = new URLSearchParams(window.location.search);
+const userId = wsParams.get("userId");
+const desk = wsParams.get("desk");
+
 if(!desk){
     alert("Select desk first");
-    window.location.href = "/dashboard.html";
+    window.location.href = "/dashboard.html" + (userId ? "?userId=" + encodeURIComponent(userId) : "");
 }
-if(!userId){
+if(!userId || !getToken()){
     alert("Session expired. Login again.");
     window.location.href = "/";
 }
@@ -232,6 +369,27 @@ setInterval(async () => {
 
 }, 1000);
 
+/* SESSION TIMER */
+setInterval(() => {
+    if (!sessionExpiry) return;
+    const now = new Date();
+    const expiry = new Date(sessionExpiry);
+    const diff = expiry - now;
+
+    if (diff <= 0) {
+        alert("⏰ Session expired (3 hours). Logging off.");
+        logout();
+        return;
+    }
+
+    const hrs = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+    document.getElementById("sessionTimer").innerText =
+        "Session: " + hrs + "h " + mins + "m " + secs + "s remaining";
+}, 1000);
+
 /* THEME */
 const themes = {
 MO:"#0B1F3A",
@@ -241,13 +399,17 @@ SETTLEMENT:"#3A1F1F"
 document.getElementById("topbar").style.background = themes[desk];
 document.getElementById("deskTitle").innerText = 
     desk + " Desk | Welcome, " + userId;
+
+if(desk === "MO"){
+    document.getElementById("termsheetBtn").style.display = "inline-block";
+}
 	
 /* GENERATE */
 async function generateQueue(){
     const res = await fetch("/api/queue/generate",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({desk,userId})
+        headers: authHeaders(),
+        body:JSON.stringify({desk})
     });
     const data = await res.json();
 
@@ -257,15 +419,17 @@ if(!data.success){
 }
 
 queue = data.trades || [];
+sessionExpiry = data.sessionExpiry;
 render();
 renderDeskActions();
 }
 
 /* REFRESH */
 async function refreshQueue(){
-    const res = await fetch("/api/queue/my?userId="+userId);
+    const res = await fetch("/api/queue/my", {
+        headers: { "Authorization": "Bearer " + getToken() }
+    });
     const data = await res.json();
-	alert("Queue refreshed");
 
 if(!data.success){
     alert(data.error || "Unable to refresh queue");
@@ -273,8 +437,10 @@ if(!data.success){
 }
 
 queue = data.trades || [];
+if (data.sessionExpiry) sessionExpiry = data.sessionExpiry;
 render();
 renderDeskActions();
+alert("Queue refreshed");
 }
 
 /* RENDER */
@@ -285,16 +451,12 @@ function render(){
     queue.forEach(t=>{
         const row = document.createElement("tr");
 
-        if(t.currentStatus.includes("BREAK")) row.classList.add("break-row");
-        if(t.currentStatus.includes("PENDING")) row.classList.add("pending-row");
-        if(t.age>2) row.classList.add("aged-row");
-
         row.innerHTML=`
 <td><input type="checkbox" onchange="selectTrade('${t.tradeRef}',this)"></td>
 <td>${t.tradeRef}</td>
 <td>${t.currentStatus}</td>
 <td>${t.nextDesk}</td>
-<td>${t.age}</td>
+<td class="num">${t.age}</td>
 <td>${format(t.tradeDate)}</td>
 <td>${format(t.valueDate)}</td>
 <td>${t.counterparty}</td>
@@ -305,7 +467,7 @@ function render(){
 <td>${t.settlementType}</td>
 <td>${t.direction}</td>
 <td>${t.currency}</td>
-<td>${t.amount}</td>
+<td class="num">${t.amount ? t.amount.toLocaleString() : ''}</td>
 `;
 
         body.appendChild(row);
@@ -321,7 +483,7 @@ function renderDeskActions(){
         html = `
         <button class="btn primary" onclick="openAction('MO_VALIDATE_PASS')">MO Validate</button>
         <button class="btn primary" onclick="openAction('MO_RAISE_BREAK')">MO Raise Break</button>
-        <button class="btn primary" onclick="openAction('MO_SEND_TO_FO')">Send to FO</button>
+        <button class="btn primary" onclick="sendToFO()">Send to FO</button>
         `;
     }
 
@@ -330,7 +492,10 @@ function renderDeskActions(){
         <button class="btn primary" onclick="openAction('CONFIRM_TRADE')">Confirm Trade</button>
         <button class="btn primary" onclick="openAction('CONFIRM_RAISE_BREAK')">Confirmation Break</button>
         <button class="btn primary" onclick="startCptyFlow()">Send to CPTY</button>
-        <button class="btn primary" onclick="openAction('CONFIRM_SEND_BACK_TO_MO')">Send to MO</button>
+        <button class="btn primary" onclick="openAction('CONFIRM_REJECT_CLAIM')">Reject Claim</button>
+        <button class="btn primary" onclick="openAction('CONFIRM_REQUEST_EVIDENCE')">Request Evidence</button>
+        <button class="btn primary" onclick="openFOChatMailbox()">Escalate to FO</button>
+        <button class="btn primary" onclick="openAction('CONFIRM_RESEND')">Resend Confirmation</button>
         `;
     }
 
@@ -348,9 +513,15 @@ function renderDeskActions(){
 
 /* SELECT */
 function selectTrade(ref,cb){
+    const isChecked = cb.checked;
     document.querySelectorAll("input[type=checkbox]").forEach(c=>c.checked=false);
-    cb.checked=true;
-    selectedTrade = queue.find(t=>t.tradeRef===ref);
+    
+    if (isChecked) {
+        cb.checked = true;
+        selectedTrade = queue.find(t=>t.tradeRef===ref);
+    } else {
+        selectedTrade = null;
+    }
 }
 
 /* FORMAT */
@@ -364,25 +535,31 @@ async function logout(){
 
     await fetch("/api/session/logout",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({userId})
+        headers: authHeaders(),
+        body:JSON.stringify({})
     });
 
-    localStorage.clear();
+    clearCookie("auth_token");
+    sessionStorage.removeItem("auth_token");
     window.location.href = "/";
 }
 
 /* ACTION SYSTEM */
 
 const allowed = {
-MO_VALIDATE_PASS:["MO_PENDING","MO_VALIDATION","PENDING_FO_RESPONSE"],
-MO_RAISE_BREAK:["MO_PENDING","MO_VALIDATION"],
+MO_VALIDATE_PASS:["MO_PENDING","PENDING_FO_RESPONSE"],
+MO_RAISE_BREAK:["MO_PENDING"],
 MO_SEND_TO_FO:["MO_BREAK_OPEN"],
 
-CONFIRM_TRADE:["CONFIRMATION_PENDING"],
-CONFIRM_RAISE_BREAK:["CONFIRMATION_PENDING"],
-CONFIRM_SEND_TO_CPTY:["CONFIRMATION_PENDING"],
-CONFIRM_SEND_BACK_TO_MO:["CONFIRMATION_BREAK"],
+CONFIRM_TRADE:["CONFIRMATION_PENDING", "LIASING_WITH_CPTY"],
+CONFIRM_RAISE_BREAK:["LIASING_WITH_CPTY"],
+CONFIRM_SEND_TO_CPTY:["CONFIRMATION_PENDING", "CONFIRMATION_BREAK", "LIASING_WITH_FO", "LIASING_WITH_CPTY"],
+CONFIRM_REJECT_CLAIM:["CONFIRMATION_BREAK"],
+CONFIRM_REQUEST_EVIDENCE:["CONFIRMATION_BREAK"],
+CONFIRM_ESCALATE_TO_FO:["CONFIRMATION_BREAK"],
+CONFIRM_RAISE_AMENDMENT:["CONFIRMATION_BREAK"],
+CONFIRM_APPROVE_AMENDMENT:["CONFIRMATION_BREAK"],
+CONFIRM_RESEND:["CONFIRMATION_PENDING"],
 
 SETTLEMENT_APPROVE:["SETTLEMENT_PENDING"],
 SETTLEMENT_RAISE_BREAK:["READY_FOR_APPROVAL"],
@@ -392,9 +569,34 @@ SETTLEMENT_FOLLOW_UP_CPTY:["SETTLEMENT_BREAK"]
 let currentAction = null;
 
 // =====================================================
+// 📧 SEND TO FO — Lifecycle + Redirect to Mailbox
+// =====================================================
+async function sendToFO(){
+
+    if(!selectedTrade){
+        alert("Select trade first");
+        return;
+    }
+
+    if(!allowed['MO_SEND_TO_FO'] || !allowed['MO_SEND_TO_FO'].includes(selectedTrade.currentStatus)){
+        alert("Invalid action for current state");
+        return;
+    }
+
+    // Redirect to mailbox in compose mode without transitioning state yet
+    const mailParams = new URLSearchParams({
+        userId: userId,
+        desk: desk,
+        tradeRef: selectedTrade.tradeRef,
+        channel: "FO",
+        composeFor: selectedTrade.tradeRef,
+        composeTo: "FO"
+    });
+    window.open("/communication.html?" + mailParams.toString(), "_blank");
+}
+
+// =====================================================
 // 🔒 STRICT FLOW: SEND TO CPTY (EMAIL REQUIRED)
-// -----------------------------------------------------
-// User must send email BEFORE lifecycle transition
 // =====================================================
 function startCptyFlow(){
 
@@ -403,10 +605,8 @@ function startCptyFlow(){
         return;
     }
 
-    // Store action temporarily
     currentAction = "CONFIRM_SEND_TO_CPTY";
 
-    // Open email popup
     document.getElementById("overlay").style.display="block";
     document.getElementById("emailPopup").style.display="block";
 
@@ -423,6 +623,15 @@ function openAction(action){
     if(!allowed[action] || !allowed[action].includes(selectedTrade.currentStatus)){
         alert("Invalid action for current state");
         return;
+    }
+
+    if (action === 'CONFIRM_RAISE_BREAK') {
+        const cptyCount = selectedTrade.cptyContactCount || 0;
+        const foCount = selectedTrade.foContactCount || 0;
+        if (cptyCount !== 1 || foCount > 0) {
+            alert("You can only raise a Confirmation Break once, immediately after the first time you mail the Counterparty.");
+            return;
+        }
     }
 
     currentAction = action;
@@ -444,11 +653,10 @@ async function submitAction(){
 }
     const res = await fetch("/api/trade/action",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers: authHeaders(),
         body:JSON.stringify({
             trade:selectedTrade,
             action:currentAction,
-            userId,
             comment
         })
     });
@@ -477,16 +685,19 @@ function closePopup(){
     document.getElementById("searchPopup").style.display="none";
 }
 
-function openMailbox(){
-
-    if(!selectedTrade){
-        alert("Select trade first-communication is trade-specific");
-        return;
+function openMailboxGeneral(){
+    const mailParams = new URLSearchParams({
+        userId: userId,
+        desk: desk
+    });
+    if(selectedTrade){
+        mailParams.set("tradeRef", selectedTrade.tradeRef);
+    }
+    if (desk === "MO") {
+        mailParams.set("channel", "FO");
     }
 
-    localStorage.setItem("activeTradeRef", selectedTrade.tradeRef);
-
-    window.open("/communication.html", "_blank");
+    window.open("/communication.html?" + mailParams.toString(), "_blank");
 }
 
 function downloadCSV(){
@@ -550,6 +761,56 @@ function openEmail(){
    document.getElementById("emailText").value = "";
 }
 
+function openTermsheet(){
+    const params = new URLSearchParams({
+        userId: userId,
+        desk: desk
+    });
+    window.open("/mo-risk.html?" + params.toString(), "_blank");
+}
+
+function openMailbox(){
+    if(!selectedTrade) return alert("Select a trade first");
+    const channelParam = desk === "MO" ? "&channel=FO" : "";
+    window.open(`/communication.html?userId=${encodeURIComponent(userId)}&desk=${encodeURIComponent(desk)}&tradeRef=${encodeURIComponent(selectedTrade.tradeRef)}${channelParam}`, '_blank');
+}
+
+function openFOChatMailbox() {
+    if(!selectedTrade) return alert("Select a trade first");
+    
+    // Redirect to mailbox in FO channel mode
+    const mailParams = new URLSearchParams({
+        userId: userId,
+        desk: desk,
+        tradeRef: selectedTrade.tradeRef,
+        channel: "FO",
+        composeFor: selectedTrade.tradeRef,
+        composeTo: "FO"
+    });
+    window.open("/communication.html?" + mailParams.toString(), "_blank");
+}
+
+function viewTruth(){
+    if(!selectedTrade){
+        alert("Select trade first");
+        return;
+    }
+    
+    let truthContent = "No truths object found for this trade.";
+    if (selectedTrade.truths) {
+        truthContent = JSON.stringify(selectedTrade.truths, null, 2);
+    } else if (selectedTrade.truth) {
+        truthContent = JSON.stringify(selectedTrade.truth, null, 2);
+    }
+    
+    const div = document.getElementById("auditContent");
+    div.innerHTML = `<pre class="xml-section" style="background:#f8fafc;color:#0f172a;padding:10px;border:1px solid #e2e8f0;border-radius:4px;overflow-x:auto;font-size:12px;white-space:pre-wrap;">${truthContent}</pre>`;
+    
+    document.querySelector("#auditPopup h3").innerText = "Underlying Truths (Testing Only)";
+    document.getElementById("overlay").style.display="block";
+    document.getElementById("auditPopup").style.display="block";
+}
+
 function openAudit(){
 
     if(!selectedTrade){
@@ -557,16 +818,58 @@ function openAudit(){
         return;
     }
 
-    fetch("/api/audit/" + selectedTrade.tradeRef)
+    fetch("/api/audit/" + selectedTrade.tradeRef, {
+        headers: { "Authorization": "Bearer " + getToken() }
+    })
     .then(r=>r.json())
     .then(data=>{
+        document.querySelector("#auditPopup h3").innerText = "Audit Trail";
         const div = document.getElementById("auditContent");
         div.innerHTML = "";
 
-        data.forEach(a=>{
-            const p = document.createElement("p");
-            p.innerText = a.action + " | " + (a.details?.comment || "");
-            div.appendChild(p);
+        const trail = data.trail || data;
+        const auditArray = Array.isArray(trail) ? trail : [];
+
+        // Check if there are any manual entries (i.e. trade was worked by a user)
+        const hasManualEntries = auditArray.some(a => a.action !== "SYSTEM_GENERATED");
+
+        // 1. If NOT worked by user (system generated only)
+        if (!hasManualEntries && data.xmlAudit) {
+            const xmlDiv = document.createElement("pre");
+            xmlDiv.className = "xml-section";
+            xmlDiv.style.background = "#f8fafc";
+            xmlDiv.style.color = "#0f172a"; // Dark slate for visibility
+            xmlDiv.style.padding = "10px";
+            xmlDiv.style.border = "1px solid #e2e8f0";
+            xmlDiv.style.borderRadius = "4px";
+            xmlDiv.style.overflowX = "auto";
+            xmlDiv.style.fontSize = "12px";
+            xmlDiv.style.whiteSpace = "pre-wrap";
+            xmlDiv.textContent = data.xmlAudit;
+            div.appendChild(xmlDiv);
+            return; // Don't show text cards
+        }
+
+        // 2. If worked by user (or no XML), show normal human readable format
+        if (auditArray.length === 0 && !data.xmlAudit) {
+            div.innerHTML = "<p style='color:#94a3b8;'>No audit entries yet.</p>";
+            return;
+        }
+
+        auditArray.forEach(a=>{
+            if (a.action === "SYSTEM_GENERATED") return;
+            const card = document.createElement("div");
+            card.className = "audit-card" + (a.isAutomated ? " system" : "");
+            const dateStr = new Date(a.timestamp).toLocaleString();
+            card.innerHTML = `
+                <div class="audit-header">
+                    <strong>${a.userId || 'System'}</strong> 
+                    <span>${dateStr}</span>
+                </div>
+                <div class="audit-action">${a.action}</div>
+                <div class="audit-details">${a.details || ""}</div>
+            `;
+            div.appendChild(card);
         });
     });
 
@@ -588,39 +891,59 @@ async function sendEmail(){
         return;
     }
 
+    if (currentAction === "CONFIRM_SEND_TO_CPTY") {
+        const res = await fetch("/api/trade/action",{
+            method:"POST",
+            headers: authHeaders(),
+            body:JSON.stringify({
+                trade:selectedTrade,
+                action:currentAction,
+                comment:text
+            })
+        });
+
+        const data = await res.json();
+        if(!data.success){
+            alert(data.error || "Email send failed");
+            return;
+        }
+        
+        alert("Email sent successfully");
+        document.getElementById("emailText").value = "";
+        closePopup();
+        refreshQueue();
+        return;
+    }
+
     console.log("Email sent for:", selectedTrade.tradeRef);
     console.log("Message:", text);
 
-// ✅ Send email ONLY (no lifecycle change)
-await fetch("/api/conversation/send", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-        tradeRef: selectedTrade.tradeRef,
-        sender: "USER",
-        message: text
-    })
-});
-
-alert("Email sent to counterparty");
+    // Send generic email via API
+    const res = await fetch("/api/conversation/send", {
+        method:"POST",
+        headers: authHeaders(),
+        body:JSON.stringify({
+            tradeRef: selectedTrade.tradeRef,
+            sender: userId,
+            message: text,
+            desk: desk
+        })
+    });
 
     const data = await res.json();
 
     if(!data.success){
-        alert(data.error || "Action failed");
+        alert(data.error || "Email send failed");
         return;
     }
 
-    queue = data.trades || [];
-    selectedTrade = null;
-
-    render();
-    renderDeskActions();
-
-    alert("Email sent & trade moved to Liaising with CPTY");
+    alert("Email sent successfully");
 
     document.getElementById("emailText").value = "";
     closePopup();
+    
+    // Refresh the queue to show any state updates
+    refreshQueue();
 }
 
 function openSearch(){
@@ -629,48 +952,6 @@ function openSearch(){
 	document.getElementById("searchResults").innerText = "Search not implemented yet";
 }
 
-// =====================================================
-// 🔧 TEMP: SIMULATE BUTTON (FO RESPONSE SIMULATION)
-// -----------------------------------------------------
-// This function simulates FO response for testing only.
-// It sets foResponseReceived = true and allows validation.
-// ⚠️ REMOVE once AI / communication engine is implemented.
-// =====================================================
-async function simulateFO(){
-
-    if(!selectedTrade){
-        alert("Select trade first");
-        return;
-    }
-
-    const currentRef = selectedTrade.tradeRef;
-
-    const res = await fetch("/api/trade/action",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-            trade:selectedTrade,
-            action:"SIMULATE_FO_RESPONSE",
-            userId,
-            comment:"FO response simulated"
-        })
-    });
-
-    const data = await res.json();
-
-    if(!data.success){
-        alert(data.error || "Simulation failed");
-        return;
-    }
-
-    queue = data.trades || [];
-
-    // ✅ VERY IMPORTANT: refresh selectedTrade
-    selectedTrade = queue.find(t => t.tradeRef === currentRef);
-
-    render();
-    renderDeskActions();
-}
 
 let alert1hrShown = false;
 let alert10minShown = false;
@@ -694,6 +975,38 @@ function handleAlerts(data){
         logout();
     }
 }
+
+// On page load, try to refresh existing queue
+(async function initLoad() {
+    try {
+        const res = await fetch("/api/queue/my", {
+            headers: { "Authorization": "Bearer " + getToken() }
+        });
+        const data = await res.json();
+        if (data.success) {
+            queue = data.trades || [];
+            sessionExpiry = data.sessionExpiry;
+            render();
+            renderDeskActions();
+            
+            if (sessionStorage.getItem("justLoggedIn") === "true") {
+                sessionStorage.removeItem("justLoggedIn");
+                
+                const now = new Date();
+                const expiry = new Date(sessionExpiry);
+                const diff = expiry - now;
+                
+                if (diff > 0) {
+                    const hrs = Math.floor(diff / (1000 * 60 * 60));
+                    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    alert(`Resuming previous session — ${hrs}h ${mins}m remaining`);
+                }
+            }
+        }
+    } catch (e) {
+        // No existing queue — user will generate one
+    }
+})();
 </script>
 
 </body>

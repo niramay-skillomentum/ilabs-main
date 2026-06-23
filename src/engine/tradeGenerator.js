@@ -1,0 +1,619 @@
+// ======================================
+// TRADE GENERATOR (V2 — DESK-SPECIFIC TRUTHS)
+// Generates realistic trades with:
+// - truths.mo (FO truth for MO validation)
+// - truths.confirmation (counterparty expected economics)
+// - State-aware XML audit trails
+// ======================================
+
+const Trade = require("../models/Trade");
+const AuditLog = require("../models/AuditLog");
+
+// ============================
+// REFERENCE DATA
+// ============================
+const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CHF", "AUD"];
+const COUNTERPARTIES = ["CITI", "HSBC", "DB", "JPM", "BNP", "BARC", "MS", "UBS"];
+const ENTITIES = ["GS London", "GS New York", "GS Singapore", "GS Tokyo", "GS Frankfurt"];
+const REGIONS = ["AMER", "EMEA", "APAC"];
+const PRODUCTS = ["FX", "Equity", "Derivatives", "Fixed Income"];
+const TRADE_TYPES = ["OTC", "Listed"];
+const SETTLEMENT_TYPES = ["Electronic", "Bilateral"];
+const DIRECTIONS = ["BUY", "SELL"];
+
+const MO_BREAK_TYPES = ["AMOUNT", "VALUE_DATE", "CURRENCY", "COUNTERPARTY"];
+// Confirmation breaks: no counterparty mismatch per user feedback
+const CONFIRMATION_BREAK_TYPES = ["AMOUNT", "VALUE_DATE", "CURRENCY"];
+
+// System actors for automated audit trails
+const SYSTEM_ACTORS = [
+  "SYSTEM_BOOKING_ENGINE",
+  "AUTO_VALIDATOR",
+  "TRADE_CAPTURE_SYSTEM",
+  "RISK_ENGINE",
+  "COMPLIANCE_CHECK",
+  "MO_ANALYST_SYSTEM"
+];
+
+// ~30% of MO-clean trades will have a confirmation-level discrepancy
+const CONFIRMATION_BREAK_RATIO = 0.3;
+
+// ============================
+// UTILITY FUNCTIONS
+// ============================
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateRealisticAmount(currency) {
+  let base;
+  if (currency === "JPY") base = Math.random() * 10000000;
+  else base = Math.random() * 2000000;
+
+  const irregular = Math.floor(Math.random() * 997) + 3;
+  return Math.floor(base / irregular) * irregular + Math.floor(Math.random() * 97);
+}
+
+function generateTradeRef() {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  return `TRD_${timestamp}_${random}`;
+}
+
+function formatDateForXml(date) {
+  return new Date(date).toISOString();
+}
+
+// ============================
+// BREAK DESCRIPTION HELPERS
+// ============================
+
+/**
+ * Describes the discrepancy between MO truth and booking for a trade.
+ */
+function describeBreak(trade) {
+  const moTruth = trade.truths?.mo;
+  if (!moTruth || !trade.booking) return "Discrepancy detected";
+
+  const mismatches = [];
+
+  if (moTruth.amount !== trade.booking.amount) {
+    mismatches.push(`Amount mismatch: FO Truth = ${moTruth.currency || trade.currency} ${moTruth.amount}, Booking = ${trade.booking.currency || trade.currency} ${trade.booking.amount}`);
+  }
+  if (moTruth.valueDate && trade.booking.valueDate &&
+    new Date(moTruth.valueDate).getTime() !== new Date(trade.booking.valueDate).getTime()) {
+    mismatches.push(`Value Date mismatch: FO Truth = ${new Date(moTruth.valueDate).toISOString().split("T")[0]}, Booking = ${new Date(trade.booking.valueDate).toISOString().split("T")[0]}`);
+  }
+  if (moTruth.currency !== trade.booking.currency) {
+    mismatches.push(`Currency mismatch: FO Truth = ${moTruth.currency}, Booking = ${trade.booking.currency}`);
+  }
+  if (moTruth.counterparty !== trade.booking.counterparty) {
+    mismatches.push(`Counterparty mismatch: FO Truth = ${moTruth.counterparty}, Booking = ${trade.booking.counterparty}`);
+  }
+
+  return mismatches.length > 0
+    ? mismatches.join("; ")
+    : "Discrepancy detected between FO truth and booking record";
+}
+
+// ============================
+// STATE-AWARE XML AUDIT GENERATOR
+// ============================
+
+function generateXmlAudit(trade) {
+  const tradeDate = new Date(trade.tradeDate);
+  const events = [];
+  let evtCounter = 1;
+
+  const moTruth = trade.truths?.mo;
+  const hasBreak = moTruth && trade.booking &&
+    (moTruth.amount !== trade.booking.amount ||
+     moTruth.currency !== trade.booking.currency ||
+     moTruth.counterparty !== trade.booking.counterparty ||
+     (moTruth.valueDate && trade.booking.valueDate &&
+      new Date(moTruth.valueDate).getTime() !== new Date(trade.booking.valueDate).getTime()));
+
+  // ── CONFIRMATION_BREAK custom audit ──
+  if (trade.nextDesk === "CONFIRMATION" && trade.currentStatus === "CONFIRMATION_BREAK") {
+    events.push({
+      eventId: `EVT_${trade.tradeRef}_001`,
+      timestamp: new Date(),
+      actor: "SYSTEM",
+      action: "BREAK_GENERATED",
+      details: "Electronically generated break",
+      status: "CONFIRMATION_BREAK"
+    });
+  } else {
+    // ── Normal Audit Generation ──
+    // ── Event 1: Trade Captured ──
+  const captureTime = new Date(tradeDate);
+  captureTime.setMinutes(captureTime.getMinutes() + Math.floor(Math.random() * 30));
+  events.push({
+    eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+    timestamp: captureTime,
+    actor: "TRADE_CAPTURE_SYSTEM",
+    action: "TRADE_CAPTURED",
+    details: `Trade ${trade.tradeRef} captured. Product: ${trade.product}, Direction: ${trade.direction}, Amount: ${trade.currency} ${trade.amount}, Counterparty: ${trade.counterparty}`,
+    status: "NEW"
+  });
+
+  // ── Event 2: Compliance Check ──
+  const complianceTime = new Date(captureTime);
+  complianceTime.setMinutes(complianceTime.getMinutes() + Math.floor(Math.random() * 15) + 5);
+  events.push({
+    eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+    timestamp: complianceTime,
+    actor: "COMPLIANCE_CHECK",
+    action: "COMPLIANCE_VALIDATED",
+    details: `Compliance check passed. Counterparty: ${trade.counterparty}, Entity: ${trade.entity}, Region: ${trade.foRegion}`,
+    status: "COMPLIANCE_CLEARED"
+  });
+
+  // ── Event 3: Risk Assessment ──
+  const riskTime = new Date(complianceTime);
+  riskTime.setMinutes(riskTime.getMinutes() + Math.floor(Math.random() * 20) + 5);
+  events.push({
+    eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+    timestamp: riskTime,
+    actor: "RISK_ENGINE",
+    action: "RISK_ASSESSED",
+    details: `Risk assessment completed. Credit category: Standard. Settlement type: ${trade.settlementType}`,
+    status: "RISK_CLEARED"
+  });
+
+  // ── Event 4: Booking recorded ──
+  const bookingTime = new Date(riskTime);
+  bookingTime.setMinutes(bookingTime.getMinutes() + Math.floor(Math.random() * 10) + 2);
+
+  if (hasBreak) {
+    events.push({
+      eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+      timestamp: bookingTime,
+      actor: "SYSTEM_BOOKING_ENGINE",
+      action: "BOOKING_RECORDED",
+      details: `Booking recorded. Amount: ${trade.booking.currency} ${trade.booking.amount}, Value Date: ${new Date(trade.booking.valueDate).toISOString().split("T")[0]}, Counterparty: ${trade.booking.counterparty}`,
+      status: "BOOKING_RECORDED"
+    });
+  } else {
+    events.push({
+      eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+      timestamp: bookingTime,
+      actor: "AUTO_VALIDATOR",
+      action: "BOOKING_VALIDATED",
+      details: `Booking matches front office truth. No discrepancies found. Trade routed to MO desk for validation.`,
+      status: "BOOKING_VALIDATED"
+    });
+  }
+
+  // ── Event 5: Routed to MO ──
+  const routeTime = new Date(bookingTime);
+  routeTime.setMinutes(routeTime.getMinutes() + Math.floor(Math.random() * 5) + 1);
+  events.push({
+    eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+    timestamp: routeTime,
+    actor: "SYSTEM_BOOKING_ENGINE",
+    action: "ROUTED_TO_MO",
+    details: `Trade routed to MO desk for processing. Status: MO_PENDING`,
+    status: "MO_PENDING"
+  });
+
+  // ══════════════════════════════════════════
+  // STATE-SPECIFIC CONTINUATION
+  // ══════════════════════════════════════════
+
+  if (trade.currentStatus === "MO_BREAK_OPEN") {
+
+    // ── Event 6: Break Identified ──
+    const breakIdentifyTime = new Date(routeTime);
+    breakIdentifyTime.setMinutes(breakIdentifyTime.getMinutes() + Math.floor(Math.random() * 45) + 10);
+
+    const breakDescription = describeBreak(trade);
+
+    events.push({
+      eventId: `EVT_${trade.tradeRef}_${String(evtCounter++).padStart(3, "0")}`,
+      timestamp: breakIdentifyTime,
+      actor: "MO_ANALYST_SYSTEM",
+      action: "BREAK_IDENTIFIED",
+      details: `Break identified during MO review. ${breakDescription}. Trade status changed from MO_PENDING to MO_BREAK_OPEN.`,
+      status: "MO_BREAK_OPEN"
+    });
+  }
+  } // Close the else block for Normal Audit Generation
+
+  // ══════════════════════════════════════════
+  // BUILD XML DOCUMENT
+  // ══════════════════════════════════════════
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<AuditTrail tradeRef="${trade.tradeRef}" generatedAt="${formatDateForXml(new Date())}">\n`;
+  xml += `  <TradeInfo>\n`;
+  xml += `    <TradeRef>${trade.tradeRef}</TradeRef>\n`;
+  xml += `    <Product>${trade.product}</Product>\n`;
+  xml += `    <Direction>${trade.direction}</Direction>\n`;
+  xml += `    <Currency>${trade.currency}</Currency>\n`;
+  xml += `    <Amount>${trade.amount}</Amount>\n`;
+  xml += `    <Counterparty>${trade.counterparty}</Counterparty>\n`;
+  xml += `    <Entity>${trade.entity}</Entity>\n`;
+  xml += `    <TradeDate>${formatDateForXml(trade.tradeDate)}</TradeDate>\n`;
+  xml += `    <ValueDate>${formatDateForXml(trade.valueDate)}</ValueDate>\n`;
+  xml += `    <CurrentStatus>${trade.currentStatus}</CurrentStatus>\n`;
+  xml += `  </TradeInfo>\n`;
+
+  // Include MO truth vs booking if break exists
+  if (hasBreak && moTruth) {
+    xml += `  <DiscrepancyInfo>\n`;
+    xml += `    <FOTruth>\n`;
+    xml += `      <Amount>${moTruth.amount}</Amount>\n`;
+    xml += `      <ValueDate>${formatDateForXml(moTruth.valueDate)}</ValueDate>\n`;
+    xml += `      <Currency>${moTruth.currency}</Currency>\n`;
+    xml += `      <Counterparty>${moTruth.counterparty}</Counterparty>\n`;
+    xml += `    </FOTruth>\n`;
+    xml += `    <Booking>\n`;
+    xml += `      <Amount>${trade.booking.amount}</Amount>\n`;
+    xml += `      <ValueDate>${formatDateForXml(trade.booking.valueDate)}</ValueDate>\n`;
+    xml += `      <Currency>${trade.booking.currency}</Currency>\n`;
+    xml += `      <Counterparty>${trade.booking.counterparty}</Counterparty>\n`;
+    xml += `    </Booking>\n`;
+    xml += `  </DiscrepancyInfo>\n`;
+  }
+
+  xml += `  <Events>\n`;
+  events.forEach(evt => {
+    xml += `    <Event>\n`;
+    xml += `      <EventId>${evt.eventId}</EventId>\n`;
+    xml += `      <Timestamp>${formatDateForXml(evt.timestamp)}</Timestamp>\n`;
+    xml += `      <Actor>${evt.actor}</Actor>\n`;
+    xml += `      <Action>${evt.action}</Action>\n`;
+    xml += `      <Details>${evt.details}</Details>\n`;
+    xml += `      <ResultingStatus>${evt.status}</ResultingStatus>\n`;
+    xml += `    </Event>\n`;
+  });
+  xml += `  </Events>\n`;
+  xml += `</AuditTrail>`;
+
+  return { xml, events };
+}
+
+// ============================
+// TRADE GENERATION
+// ============================
+
+/**
+ * Generate a single realistic trade object with desk-specific truths.
+ * @param {string} desk - Target desk (MO, CONFIRMATION, SETTLEMENT)
+ * @param {boolean} isMoBreak - Whether to inject an MO-level break
+ * @param {string|null} forcedStatus - Force a specific status
+ * @param {boolean} hasConfirmationBreak - Whether to inject a confirmation-level break
+ * @returns {Object} Trade object (not yet saved to DB)
+ */
+function generateSingleTrade(desk, isMoBreak, forcedStatus = null, hasConfirmationBreak = false) {
+  const now = new Date();
+  const tradeDate = new Date(now);
+
+  // Randomize trade date to be within last 3 days for realism
+  tradeDate.setDate(tradeDate.getDate() - Math.floor(Math.random() * 3));
+
+  const currency = pick(CURRENCIES);
+  const product = pick(PRODUCTS);
+
+  // T+2 enforcement
+  let valueDate = new Date(tradeDate);
+  valueDate.setDate(tradeDate.getDate() + 2);
+
+  const baseAmount = generateRealisticAmount(currency);
+  const initialCounterparty = pick(COUNTERPARTIES);
+
+  // 1. UNIVERSAL TRUTH (The Absolute Correct Economics)
+  const universalTruth = {
+    amount: baseAmount,
+    valueDate: new Date(valueDate),
+    currency: currency,
+    counterparty: initialCounterparty
+  };
+
+  // 2. TRUTH SCENARIOS (40/30/30 Distribution)
+  let moTruthAmount = universalTruth.amount;
+  let moTruthValueDate = new Date(universalTruth.valueDate);
+  let moTruthCurrency = universalTruth.currency;
+  let moTruthCounterparty = universalTruth.counterparty;
+
+  let confirmTruthAmount = universalTruth.amount;
+  let confirmTruthValueDate = new Date(universalTruth.valueDate);
+  let confirmTruthCurrency = universalTruth.currency;
+  let confirmDisputeType = null;
+
+  let rand = Math.random();
+  // Force a truth discrepancy if a confirmation break was explicitly requested
+  if (hasConfirmationBreak) {
+    rand = 0.4 + (Math.random() * 0.6); 
+  }
+
+  if (rand < 0.4) {
+    // Scenario 1 (40%): Clean Universally - FO and CPTY truths match Universal
+  } else if (rand < 0.7) {
+    // Scenario 2 (30%): FO Error - FO Truth != Universal, CPTY Truth == Universal
+    const errorField = pick(CONFIRMATION_BREAK_TYPES);
+    if (errorField === "AMOUNT") moTruthAmount += (Math.floor(Math.random() * 5) + 1) * 10000;
+    else if (errorField === "VALUE_DATE") moTruthValueDate.setDate(moTruthValueDate.getDate() + 1);
+    else if (errorField === "CURRENCY") moTruthCurrency = pick(CURRENCIES.filter(c => c !== universalTruth.currency));
+    
+    // To trigger confirmation logic downstream, flag this as a dispute
+    confirmDisputeType = errorField;
+  } else {
+    // Scenario 3 (30%): CPTY Error - FO Truth == Universal, CPTY Truth != Universal
+    confirmDisputeType = pick(CONFIRMATION_BREAK_TYPES);
+    if (confirmDisputeType === "AMOUNT") confirmTruthAmount += (Math.floor(Math.random() * 5) + 1) * 10000;
+    else if (confirmDisputeType === "VALUE_DATE") confirmTruthValueDate.setDate(confirmTruthValueDate.getDate() + 1);
+    else if (confirmDisputeType === "CURRENCY") confirmTruthCurrency = pick(CURRENCIES.filter(c => c !== universalTruth.currency));
+  }
+
+  // 3. BOOKING GENERATION
+  // MO checks Booking vs FO Truth (moTruth)
+  let bookingAmount = moTruthAmount;
+  let bookingValueDate = new Date(moTruthValueDate);
+  let bookingCurrency = moTruthCurrency;
+  let bookingCounterparty = moTruthCounterparty;
+
+  // Inject MO-level break (discrepancy between MO truth and booking)
+  if (isMoBreak) {
+    const moBreakType = pick(MO_BREAK_TYPES);
+    if (moBreakType === "AMOUNT") {
+      bookingAmount = moTruthAmount - (Math.floor(Math.random() * 5) + 1) * 10000;
+    } else if (moBreakType === "VALUE_DATE") {
+      bookingValueDate.setDate(bookingValueDate.getDate() - 1);
+    } else if (moBreakType === "CURRENCY") {
+      bookingCurrency = pick(CURRENCIES.filter(c => c !== moTruthCurrency));
+    } else if (moBreakType === "COUNTERPARTY") {
+      bookingCounterparty = pick(COUNTERPARTIES.filter(c => c !== moTruthCounterparty));
+    }
+  }
+
+  // Determine status
+  let currentStatus;
+  if (forcedStatus) {
+    currentStatus = forcedStatus;
+  } else if (desk === "MO") {
+    currentStatus = "MO_PENDING";
+  } else if (desk === "CONFIRMATION") {
+    currentStatus = isMoBreak ? "CONFIRMATION_BREAK" : "CONFIRMATION_PENDING";
+  } else if (desk === "SETTLEMENT") {
+    currentStatus = isMoBreak ? "SETTLEMENT_BREAK" : "SETTLEMENT_PENDING";
+  } else {
+    currentStatus = desk + "_PENDING";
+  }
+
+  const trade = {
+    tradeRef: generateTradeRef(),
+    originType: "AUTO_GENERATED",
+    isAutoGenerated: true,
+
+    tradeDate,
+    valueDate: bookingValueDate,
+    nextDesk: desk,
+    currentStatus,
+
+    amount: bookingAmount,
+    currency: bookingCurrency,
+    counterparty: bookingCounterparty,
+
+    truths: {
+      universal: {
+        amount: universalTruth.amount,
+        valueDate: universalTruth.valueDate,
+        currency: universalTruth.currency,
+        counterparty: universalTruth.counterparty
+      },
+      mo: {
+        amount: moTruthAmount,
+        valueDate: moTruthValueDate,
+        currency: moTruthCurrency,
+        counterparty: moTruthCounterparty
+      },
+      confirmation: {
+        amount: confirmTruthAmount,
+        valueDate: confirmTruthValueDate,
+        currency: confirmTruthCurrency
+      },
+      settlement: {
+        amount: universalTruth.amount,
+        valueDate: universalTruth.valueDate,
+        currency: universalTruth.currency,
+        counterparty: universalTruth.counterparty
+      }
+    },
+
+    booking: {
+      amount: bookingAmount,
+      valueDate: bookingValueDate,
+      currency: bookingCurrency,
+      counterparty: bookingCounterparty
+    },
+
+    // Confirmation scenario metadata
+    confirmationScenario: {
+      disputeType: confirmDisputeType,
+      expectedEconomics: confirmDisputeType ? {
+        amount: confirmTruthAmount,
+        valueDate: confirmTruthValueDate,
+        currency: confirmTruthCurrency
+      } : null,
+      evidence: []
+    },
+
+    foEscalation: {
+      status: null
+    },
+
+    amendmentHistory: [],
+
+    direction: pick(DIRECTIONS),
+    entity: pick(ENTITIES),
+    foRegion: pick(REGIONS),
+    product,
+    tradeType: pick(TRADE_TYPES),
+    settlementType: pick(SETTLEMENT_TYPES),
+
+    age: Math.floor(Math.random() * 5),
+    assignedTo: null,
+    auditXml: null
+  };
+
+  return trade;
+}
+
+/**
+ * Generate trades with proper MO state distribution.
+ *
+ * State distribution for MO desk (8 break trades):
+ *   - 4 trades: MO_PENDING (break exists but user must discover it)
+ *   - 4 trades: MO_BREAK_OPEN (break already identified by system)
+ *
+ * ~30% of clean trades will also have a confirmation-level break
+ * (invisible to MO, only discovered when trade reaches Confirmation desk).
+ *
+ * @param {number} cleanCount - Number of clean trades
+ * @param {number} breakCount - Number of break trades
+ * @param {string} desk - Target desk
+ * @returns {Array} Array of trade objects with XML audits attached
+ */
+function generateTrades(cleanCount, breakCount, desk) {
+  const trades = [];
+
+  let defaultCleanStatus = "MO_PENDING";
+  if (desk === "CONFIRMATION") defaultCleanStatus = "CONFIRMATION_PENDING";
+  if (desk === "SETTLEMENT") defaultCleanStatus = "SETTLEMENT_PENDING";
+
+  // ── Generate CLEAN trades ──
+  // For MO desk, some clean trades might have a hidden confirmation break
+  for (let i = 0; i < cleanCount; i++) {
+    let hasConfirmationBreak = false;
+    if (desk === "MO") {
+      hasConfirmationBreak = Math.random() < CONFIRMATION_BREAK_RATIO;
+    }
+    const trade = generateSingleTrade(desk, false, defaultCleanStatus, hasConfirmationBreak);
+
+    // Generate XML audit (story: captured → validated → routed)
+    const { xml } = generateXmlAudit(trade);
+    trade.auditXml = xml;
+
+    trades.push(trade);
+  }
+
+  // ── Generate BREAK trades with varied states ──
+  for (let i = 0; i < breakCount; i++) {
+    let isMoBreak = false;
+    let status = defaultCleanStatus;
+    let hasConfirmationBreak = false;
+
+    if (desk === "MO") {
+      isMoBreak = true;
+      // Distribution: ~50% MO_PENDING, ~50% MO_BREAK_OPEN
+      status = i < Math.ceil(breakCount * 0.5) ? "MO_PENDING" : "MO_BREAK_OPEN";
+      hasConfirmationBreak = Math.random() < CONFIRMATION_BREAK_RATIO;
+    } else if (desk === "CONFIRMATION") {
+      // Force confirmation break explicitly
+      isMoBreak = false;
+      hasConfirmationBreak = true;
+      status = "CONFIRMATION_BREAK";
+    } else if (desk === "SETTLEMENT") {
+      isMoBreak = false;
+      status = "SETTLEMENT_PENDING";
+    }
+
+    const trade = generateSingleTrade(desk, isMoBreak, status, hasConfirmationBreak);
+
+    // Generate XML audit
+    const { xml } = generateXmlAudit(trade);
+    trade.auditXml = xml;
+
+    trades.push(trade);
+  }
+
+  return trades;
+}
+
+/**
+ * Save generated trades to DB and create automated audit log entries.
+ * @param {Array} trades - Array of trade objects to persist
+ * @returns {Array} Saved trade documents
+ */
+async function saveGeneratedTrades(trades) {
+  if (trades.length === 0) return [];
+
+  try {
+    // Insert trades into DB
+    const savedTrades = await Trade.insertMany(trades, { ordered: false });
+
+    // Create automated audit log entries with XML content
+    const auditEntries = trades.map(trade => ({
+      tradeRef: trade.tradeRef,
+      action: "SYSTEM_GENERATED",
+      userId: "SYSTEM",
+      desk: trade.nextDesk,
+      details: `Auto-generated trade. Status: ${trade.currentStatus}. MO Break: ${trade.truths?.mo?.amount !== trade.booking?.amount || trade.truths?.mo?.currency !== trade.booking?.currency || trade.truths?.mo?.counterparty !== trade.booking?.counterparty ? 'YES' : 'NO'}. Confirmation Break: ${trade.confirmationScenario?.disputeType ? 'YES (' + trade.confirmationScenario.disputeType + ')' : 'NO'}`,
+      xmlContent: trade.auditXml,
+      isAutomated: true,
+      timestamp: new Date()
+    }));
+
+    await AuditLog.insertMany(auditEntries, { ordered: false });
+
+    // ── Inject Mock Conversations for Confirmation Pre-populated States ──
+    const conversationEngine = require("./conversationEngine");
+    const offlineResponseEngine = require("./offlineResponseEngine");
+    
+    // Counter for how many proactive emails we've generated
+    let proactiveEmailCount = 0;
+    
+    for (const trade of trades) {
+      if (trade.nextDesk === "CONFIRMATION" && trade.currentStatus === "CONFIRMATION_PENDING" && proactiveEmailCount < 3) {
+          // Generate a proactive email from CPTY to USER for CONFIRMATION_PENDING
+          const cptyTruth = trade.truths?.counterparty || trade.truth || trade;
+          const formatDate = (dateStr) => {
+              if (!dateStr) return "";
+              return new Date(dateStr).toISOString().split('T')[0];
+          };
+
+          const tableHtml = `
+          <br><br>
+          <table style="border-collapse: collapse; width: 100%; max-width: 400px; font-size: 13px; text-align: left;">
+            <tr><th style="border: 1px solid #c8c8c8; padding: 6px; background-color: #f3f2f1;">Field</th><th style="border: 1px solid #c8c8c8; padding: 6px; background-color: #f3f2f1;">Value</th></tr>
+            <tr><td style="border: 1px solid #c8c8c8; padding: 6px;">Trade Date</td><td style="border: 1px solid #c8c8c8; padding: 6px;">${formatDate(cptyTruth.tradeDate)}</td></tr>
+            <tr><td style="border: 1px solid #c8c8c8; padding: 6px;">Value Date</td><td style="border: 1px solid #c8c8c8; padding: 6px;">${formatDate(cptyTruth.valueDate)}</td></tr>
+            <tr><td style="border: 1px solid #c8c8c8; padding: 6px;">Direction</td><td style="border: 1px solid #c8c8c8; padding: 6px;">${cptyTruth.direction || trade.direction}</td></tr>
+            <tr><td style="border: 1px solid #c8c8c8; padding: 6px;">Currency</td><td style="border: 1px solid #c8c8c8; padding: 6px;">${cptyTruth.currency || trade.currency}</td></tr>
+            <tr><td style="border: 1px solid #c8c8c8; padding: 6px;">Amount</td><td style="border: 1px solid #c8c8c8; padding: 6px;">${cptyTruth.amount || trade.amount}</td></tr>
+          </table>
+          <br>
+          `;
+
+          const body = `Hi, below are the details for trade ${trade.tradeRef}. Please confirm this matches your records. Thanks.${tableHtml}`;
+          
+          await conversationEngine.createMessage(
+            trade.tradeRef,
+            "COUNTERPARTY",
+            body,
+            `Confirmation Request from CPTY - ${trade.tradeRef}`,
+            "CONFIRMATION"
+          );
+          proactiveEmailCount++;
+      }
+    }
+
+    return savedTrades;
+  } catch (err) {
+    // Ignore duplicate key errors from race conditions
+    if (err.code !== 11000) {
+      console.error("Trade generation DB error:", err.message);
+    }
+    return trades; // Return in-memory trades as fallback
+  }
+}
+
+module.exports = {
+  generateTrades,
+  generateSingleTrade,
+  generateXmlAudit,
+  saveGeneratedTrades,
+  generateRealisticAmount
+};

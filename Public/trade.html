@@ -115,9 +115,27 @@ margin-bottom:10px;
 
 <script>
 
-const USER_ID = localStorage.getItem("userId");
-if (!USER_ID) {
-    alert("User session missing. Go back to workstation.");
+// Cookie helper
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+function getToken() { return sessionStorage.getItem("auth_token") || getCookie("auth_token"); }
+function authHeaders() {
+    return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + getToken()
+    };
+}
+
+const urlParams = new URLSearchParams(window.location.search);
+const USER_ID = urlParams.get("userId");
+const currentDesk = urlParams.get("desk");
+const tradeRefParam = urlParams.get("tradeRef");
+
+if (!USER_ID || !getToken()) {
+    alert("User session missing. Login again.");
+    window.location.href = "/";
 }
 
 let trade=null;
@@ -125,7 +143,7 @@ let messages=[];
 
 /* ===== HELPERS ===== */
 function getDesk(){
-  return localStorage.getItem("currentDesk");
+  return currentDesk;
 }
 
 /* ===== CLOCK ===== */
@@ -137,7 +155,7 @@ function startClock(){
 
             const el = document.getElementById("clock");
             if(el){
-                el.innerText = "Sim Time: " + data.operationalTimeET + " (EST)";
+                el.innerText = "Sim Time: " + data.simTime;
             }
         }catch(err){
             console.error("Clock error:", err);
@@ -147,38 +165,39 @@ function startClock(){
 
 /* ===== NAV ===== */
 function goBack(){
-    const desk = getDesk();
-    if(desk==="MO") window.location.href="/mo.html";
-    if(desk==="CONFIRMATION") window.location.href="/confirmation.html";
+    window.location.href = "/workstation.html?userId=" + encodeURIComponent(USER_ID) + "&desk=" + encodeURIComponent(currentDesk);
 }
 
-/* ===== SAFE LOAD TRADE ===== */
-function loadTrade(){
-
-    const saved = localStorage.getItem("selectedTrade");
-
-    if(!saved){
+/* ===== LOAD TRADE FROM SERVER ===== */
+async function loadTrade(){
+    if(!tradeRefParam){
         alert("No trade selected");
         return;
     }
 
-    try{
-        trade = JSON.parse(saved);
-    }catch(err){
-        console.error("Invalid trade in storage", err);
-        alert("Invalid trade data");
-        return;
-    }
+    try {
+        const res = await fetch("/api/queue/my", {
+            headers: { "Authorization": "Bearer " + getToken() }
+        });
+        const data = await res.json();
 
-    if(!trade || !trade.tradeRef){
-        alert("Invalid trade object");
-        return;
-    }
+        if (data.success && data.trades) {
+            trade = data.trades.find(t => t.tradeRef === tradeRefParam);
+        }
 
-    renderTrade();
-    renderActions();
-    loadAudit();
-    loadConversation();
+        if (!trade) {
+            alert("Trade not found in your queue");
+            return;
+        }
+
+        renderTrade();
+        renderActions();
+        loadAudit();
+        loadConversation();
+    } catch(err) {
+        console.error("Load trade error:", err);
+        alert("Failed to load trade");
+    }
 }
 
 /* ===== BLOTTER ===== */
@@ -224,17 +243,7 @@ function renderActions(){
 
 /* ===== UPDATE QUEUE ===== */
 function updateQueue(updatedTrade){
-
-  const desk = getDesk();
-  let key = desk === "MO" ? "MO_QUEUE" : "CONF_QUEUE";
-
-  let queue = JSON.parse(localStorage.getItem(key)) || [];
-
-  queue = queue.map(t =>
-      t.tradeRef === updatedTrade.tradeRef ? updatedTrade : t
-  );
-
-  localStorage.setItem(key, JSON.stringify(queue));
+  // No-op: queue state is managed server-side
 }
 
 /* ===== ACTION ===== */
@@ -244,11 +253,11 @@ async function executeAction(action){
 
         const res = await fetch("/api/trade/action",{
             method:"POST",
-            headers:{ "Content-Type":"application/json" },
+            headers: authHeaders(),
             body:JSON.stringify({
                 trade,
                 action,
-                userId: USER_ID
+                comment: "Action from trade page"
             })
         });
 
@@ -279,15 +288,44 @@ async function executeAction(action){
 async function loadAudit(){
 
     try{
-        const res=await fetch("/api/audit/"+trade.tradeRef);
+        const res=await fetch("/api/audit/"+trade.tradeRef, {
+            headers: { "Authorization": "Bearer " + getToken() }
+        });
         const data=await res.json();
 
         const box=document.getElementById("audit");
         box.innerHTML="";
 
-        data.forEach(a=>{
+        const trail = data.trail || data;
+        const auditArray = Array.isArray(trail) ? trail : [];
+
+        // Check if there are any manual entries
+        const hasManualEntries = auditArray.some(a => a.action !== "SYSTEM_GENERATED");
+
+        // 1. If NOT worked by user (system generated only)
+        if (!hasManualEntries && data.xmlAudit) {
+            const xmlDiv = document.createElement("pre");
+            xmlDiv.style.background = "#f8fafc";
+            xmlDiv.style.color = "#0f172a"; // Dark slate for visibility
+            xmlDiv.style.padding = "10px";
+            xmlDiv.style.border = "1px solid #e2e8f0";
+            xmlDiv.style.borderRadius = "4px";
+            xmlDiv.style.overflowX = "auto";
+            xmlDiv.style.fontSize = "12px";
+            xmlDiv.style.whiteSpace = "pre-wrap";
+            xmlDiv.textContent = data.xmlAudit;
+            box.appendChild(xmlDiv);
+            return;
+        }
+
+        // 2. If worked by user (or no XML), show normal human readable format
+        auditArray.forEach(a=>{
+            if (a.action === "SYSTEM_GENERATED") return;
             const div=document.createElement("div");
-            div.innerText = a.action || a.event;
+            div.style.marginBottom = "10px";
+            div.style.padding = "5px";
+            div.style.border = "1px solid #ddd";
+            div.innerHTML = `<strong>${a.action || a.event}</strong><br><small>${a.details || ""}</small>`;
             box.appendChild(div);
         });
 
@@ -300,7 +338,9 @@ async function loadAudit(){
 async function loadConversation(){
 
     try{
-        const res=await fetch("/api/conversation/"+trade.tradeRef);
+        const res=await fetch("/api/conversation/"+trade.tradeRef, {
+            headers: { "Authorization": "Bearer " + getToken() }
+        });
         messages=await res.json();
         renderMailList();
     }catch(err){

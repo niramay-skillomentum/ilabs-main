@@ -51,35 +51,58 @@
       Select a document to view
     </div>
 
-    <!-- FIXED BUTTON POSITION -->
-    <button onclick="simulateAmendment()" style="margin-top:10px;">
-      Simulate FO Amendment
-    </button>
-
   </div>
 
 </div>
 
 <script>
 
-let userId = localStorage.getItem("userId");
-let desk = localStorage.getItem("desk");
+// Cookie helper
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+function getToken() { return sessionStorage.getItem("auth_token") || getCookie("auth_token"); }
 
-if(!userId){
+const urlParams = new URLSearchParams(window.location.search);
+let userId = urlParams.get("userId");
+let desk = urlParams.get("desk");
+
+if(!getToken()){
   alert("Session expired. Login again.");
   window.location.href = "/";
 }
 
-document.getElementById("userInfo").innerText =
-  (desk || "") + " Desk | Welcome, " + userId;
+if (!userId) {
+  fetch("/api/session/info", {
+    headers: { "Authorization": "Bearer " + getToken() }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.success) {
+      userId = data.fullName || data.userId;
+      desk = data.desk || "Risk";
+      document.getElementById("userInfo").innerText = desk + " Desk | Welcome, " + userId;
+    }
+  })
+  .catch(err => console.error(err));
+} else {
+  document.getElementById("userInfo").innerText =
+    (desk || "") + " Desk | Welcome, " + userId;
+}
 
 let allTrades = [];
+
+// In-memory amendments (no localStorage)
+let amendments = {};
 
 /* =========================
    LOAD TRADES
 ========================= */
 function loadTrades(){
-  fetch(`/api/queue/my?userId=${userId}`)
+  fetch("/api/trade/all", {
+    headers: { "Authorization": "Bearer " + getToken() }
+  })
     .then(res => res.json())
     .then(data => {
       allTrades = data.trades || [];
@@ -129,52 +152,37 @@ function openDocument(trade){
 
   const viewer = document.getElementById("docViewer");
 
-  let foTruth = getFOTruth();
+  const moTruth = trade.truths?.mo || trade.truth;
+  let refAmount = (moTruth && moTruth.amount !== undefined) ? moTruth.amount : trade.amount;
+  let refValueDate = (moTruth && moTruth.valueDate) ? moTruth.valueDate : trade.valueDate;
+  let refCurrency = (moTruth && moTruth.currency) ? moTruth.currency : trade.currency;
+  let refCounterparty = (moTruth && moTruth.counterparty) ? moTruth.counterparty : trade.counterparty;
 
-  // 🔥 GENERATE ONLY ONCE
-  if(!foTruth[trade.tradeRef]){
-
-    let baseAmount = trade.amount;
-    let baseValueDate = trade.valueDate;
-
-    if(Math.random() < 0.5){
-      baseAmount = trade.amount + 50000;
-    }
-
-    if(Math.random() < 0.5){
-      const d = new Date(trade.valueDate);
-      d.setDate(d.getDate() + 1);
-      baseValueDate = d.toISOString();
-    }
-
-    foTruth[trade.tradeRef] = {
-      amount: baseAmount,
-      valueDate: baseValueDate
-    };
-
-    setFOTruth(foTruth);
-  }
-
-  let amendments = getAmendments()[trade.tradeRef] || {};
-  let fo = getFOTruth()[trade.tradeRef];
-
-  let refAmount = amendments.amount || fo.amount;
-  let refValueDate = amendments.valueDate || fo.valueDate;
-
-  const vd = new Date(refValueDate)
-    .toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"});
+  const tradeDateFormatted = trade.tradeDate ? new Date(trade.tradeDate).toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"}) : "";
+  const valueDateFormatted = refValueDate ? new Date(refValueDate).toLocaleDateString("en-GB", {day:"2-digit", month:"short", year:"numeric"}) : "";
 
   viewer.innerHTML = `
     <h3>Termsheet (FO Reference)</h3>
     <hr>
-
-    <p><b>Trade Reference:</b> ${trade.tradeRef}</p>
-    <p><b>Counterparty:</b> ${trade.counterparty || "N/A"}</p>
-
-    <p><b>Currency:</b> ${trade.currency}</p>
-    <p><b>Amount:</b> ${Number(refAmount).toLocaleString()}</p>
-
-    <p><b>Value Date:</b> ${vd}</p>
+    <table style="width:100%; border-collapse: collapse; font-size: 14px; border: 1px solid #ddd;">
+      <tbody>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold; width: 30%;">Trade Ref:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.tradeRef || ""}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Status:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.currentStatus || ""}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Next Desk:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.nextDesk || ""}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Age:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.age || 0}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Trade Date:</td><td style="padding: 6px; border: 1px solid #ddd;">${tradeDateFormatted}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Value Date:</td><td style="padding: 6px; border: 1px solid #ddd;">${valueDateFormatted}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Counterparty:</td><td style="padding: 6px; border: 1px solid #ddd;">${refCounterparty || "N/A"}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Entity:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.entity || ""}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">FO Region:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.foRegion || ""}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Product:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.product || ""}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Trade Type:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.tradeType || ""}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Settlement Type:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.settlementType || ""}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Direction:</td><td style="padding: 6px; border: 1px solid #ddd;">${trade.direction || ""}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Currency:</td><td style="padding: 6px; border: 1px solid #ddd;">${refCurrency || ""}</td></tr>
+        <tr><td style="padding: 6px; border: 1px solid #ddd; font-weight: bold;">Amount:</td><td style="padding: 6px; border: 1px solid #ddd;">${Number(refAmount).toLocaleString()}</td></tr>
+      </tbody>
+    </table>
   `;
 }
 
@@ -193,45 +201,6 @@ document.getElementById("searchBox").addEventListener("input", function(){
 
   renderResults(filtered);
 });
-
-/* =========================
-   AMENDMENTS
-========================= */
-function getAmendments(){
-  return JSON.parse(localStorage.getItem("amendments") || "{}");
-}
-
-/* =========================
-   FO TRUTH STORAGE
-========================= */
-function getFOTruth(){
-  return JSON.parse(localStorage.getItem("foTruth") || "{}");
-}
-
-function setFOTruth(data){
-  localStorage.setItem("foTruth", JSON.stringify(data));
-}
-
-/* =========================
-   TEST BUTTON
-========================= */
-function simulateAmendment(){
-
-  if(!allTrades.length) return;
-
-  const trade = allTrades[0];
-
-  let amendments = getAmendments();
-
-  amendments[trade.tradeRef] = {
-    amount: trade.amount + 50000,
-    valueDate: new Date(trade.valueDate).toISOString()
-  };
-
-  localStorage.setItem("amendments", JSON.stringify(amendments));
-
-  alert("FO Amendment Applied. Re-open document.");
-}
 
 /* =========================
    INIT

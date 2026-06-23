@@ -1,6 +1,6 @@
 // ======================================
-// TRUTH ENGINE
-// Verifies user claims against scenario truth
+// TRUTH ENGINE (V2 — DESK-AWARE)
+// Verifies user claims against desk-specific truths
 // ======================================
 
 let scenarioStore = [];
@@ -114,26 +114,105 @@ function getTruth(tradeRef) {
   };
 }
 
-function getMismatchFields(trade) {
+/**
+ * Helper: Get the truth object for a specific desk.
+ * Falls back to trade.truths.mo → trade.truth for backward compatibility.
+ */
+function getDeskTruth(trade, desk = "mo") {
+  const deskKey = desk.toLowerCase();
+  if (trade.truths && trade.truths[deskKey]) {
+    return trade.truths[deskKey];
+  }
+  // Fallback for legacy trades
+  if (trade.truths && trade.truths.mo) {
+    return trade.truths.mo;
+  }
+  return null;
+}
 
-  if (!trade || !trade.truth || !trade.booking) {
+/**
+ * Get mismatch fields between a desk's truth and the booking.
+ * @param {Object} trade - The trade object
+ * @param {string} desk - "mo" or "confirmation" (default: "mo")
+ * @returns {string[]} Array of mismatched field names
+ */
+function getMismatchFields(trade, desk = "mo") {
+
+  const truth = getDeskTruth(trade, desk);
+  const booking = trade.booking;
+
+  if (!truth || !booking) {
     return [];
   }
 
   const mismatches = [];
 
-  if (trade.truth.amount !== trade.booking.amount) {
+  if (truth.amount !== undefined && truth.amount !== booking.amount) {
     mismatches.push("amount");
   }
 
-  if (trade.truth.valueDate && trade.booking.valueDate &&
-      trade.truth.valueDate !== trade.booking.valueDate) {
-    mismatches.push("valueDate");
+  if (truth.valueDate && booking.valueDate &&
+      truth.valueDate !== booking.valueDate) {
+    if (new Date(truth.valueDate).getTime() !== new Date(booking.valueDate).getTime()) {
+      mismatches.push("valueDate");
+    }
+  }
+
+  if (truth.currency !== undefined && truth.currency !== booking.currency) {
+    mismatches.push("currency");
+  }
+
+  // Counterparty mismatch — only for MO (not confirmation)
+  if (desk.toLowerCase() === "mo" && truth.counterparty !== undefined && truth.counterparty !== booking.counterparty) {
+    mismatches.push("counterparty");
   }
 
   return mismatches;
   
- }
+}
+
+/**
+ * Get confirmation-level mismatches.
+ * Compares the trade's current economics (top-level fields, after MO amendments)
+ * against truths.confirmation (what the counterparty expects).
+ * @param {Object} trade - The trade object
+ * @returns {Object[]} Array of mismatch objects with field, tradeValue, cptyValue
+ */
+function getConfirmationMismatches(trade, desk = "confirmation") {
+  const confirmTruth = trade.truths?.[desk];
+  if (!confirmTruth) return [];
+
+  const mismatches = [];
+
+  // Compare trade's current top-level economics vs confirmation truth
+  if (confirmTruth.amount !== undefined && trade.amount !== confirmTruth.amount) {
+    mismatches.push({
+      field: "amount",
+      tradeValue: trade.amount,
+      cptyExpected: confirmTruth.amount
+    });
+  }
+
+  if (confirmTruth.valueDate !== undefined && trade.valueDate) {
+    if (new Date(trade.valueDate).getTime() !== new Date(confirmTruth.valueDate).getTime()) {
+      mismatches.push({
+        field: "valueDate",
+        tradeValue: trade.valueDate,
+        cptyExpected: confirmTruth.valueDate
+      });
+    }
+  }
+
+  if (confirmTruth.currency !== undefined && trade.currency !== confirmTruth.currency) {
+    mismatches.push({
+      field: "currency",
+      tradeValue: trade.currency,
+      cptyExpected: confirmTruth.currency
+    });
+  }
+
+  return mismatches;
+}
 
 module.exports = {
   verifyReference,
@@ -141,5 +220,7 @@ module.exports = {
   verifySSI,
   getTruth,
   getScenario,
-   getMismatchFields
+  getMismatchFields,
+  getDeskTruth,
+  getConfirmationMismatches
 };
