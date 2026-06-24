@@ -9,6 +9,7 @@
 const Trade = require("../models/Trade");
 const Queue = require("../models/Queue");
 const tradeGenerator = require("./tradeGenerator");
+const ageCalculator = require("./ageCalculator");
 
 // ============================
 // CONFIGURATION
@@ -160,7 +161,17 @@ class QueueComposer {
         .limit(fetchLimit)
         .lean();
 
-      const shuffledDbTrades = shuffle(dbTrades);
+      // Recalculate age for each DB trade using desk-specific rules
+      // and filter out stale trades (age > 1) so only recent trades are assigned
+      const now = new Date();
+      const freshDbTrades = dbTrades
+        .map(t => {
+          t.age = ageCalculator.calculateAge(t.tradeDate, now, desk);
+          return t;
+        })
+        .filter(t => t.age <= 1);
+
+      const shuffledDbTrades = shuffle(freshDbTrades);
 
       // Separate into clean and break
       const dbClean = shuffledDbTrades.filter(t => !isBreakTrade(t, desk));
@@ -219,12 +230,20 @@ class QueueComposer {
     // Shuffle for variety
     queue = shuffle(queue);
 
-    // Mark all trades as assigned to this user
+    // Recalculate age for all trades in final queue using desk-specific rules
+    const ageNow = new Date();
+    queue.forEach(t => {
+      t.age = ageCalculator.calculateAge(t.tradeDate, ageNow, desk);
+    });
+
+    // Mark all trades as assigned to this user and persist the recalculated age
     const tradeRefs = queue.map(t => t.tradeRef);
-    await Trade.updateMany(
-      { tradeRef: { $in: tradeRefs } },
-      { $set: { assignedTo: userId } }
-    );
+    for (const t of queue) {
+      await Trade.updateOne(
+        { tradeRef: t.tradeRef },
+        { $set: { assignedTo: userId, age: t.age } }
+      );
+    }
 
     // Create session record
     const sessionStart = new Date();
